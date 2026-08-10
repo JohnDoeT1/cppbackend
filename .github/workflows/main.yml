@@ -34,6 +34,9 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
           pip uninstall conan -y
           pip install -U conan==1.59.0
           cp -R /home/forconan/.conan /github/home/.conan
@@ -101,6 +104,9 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
           pip uninstall conan -y
           pip install -U conan==1.59.0
           cp -R /home/forconan/.conan /github/home/.conan
@@ -157,6 +163,8 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
           pip uninstall conan -y
           pip install -U conan==1.59.0
           pip install -r requirements.txt
@@ -166,14 +174,6 @@ jobs:
         run: |
           cd cpp-backend-tests-practicum/scripts/sprint3
           ./instrumentation/run.sh
-
-#      - name: Load map_json binary
-#        uses: actions/download-artifact@v3
-#        with:
-#          name: game_server
-#          path: ${{ github.workspace }}/sprint1/problems/map_json/solution/build/bin
-
-#      - run: chmod +x ${GITHUB_WORKSPACE}/sprint1/problems/map_json/solution/build/bin/game_server
 
       - name: Load FlameGraph
         uses: actions/checkout@v3
@@ -271,6 +271,8 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
           pip uninstall conan -y
           pip install -U conan==1.59.0
           pip install -r requirements.txt
@@ -307,6 +309,12 @@ jobs:
         with:
           submodules: true
 
+      - name: Install dependencies
+        run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
+
       - name: run tests sprint3 ammo
         run: |
           cd cpp-backend-tests-practicum/scripts/sprint3
@@ -317,14 +325,6 @@ jobs:
           cd cpp-backend-tests-practicum/scripts/sprint3
           ./load/run_ci.sh
 
-##      - name: run tests sprint3 stress
-##        run: |
-##          cd sprint3/problems/stress/solution
-##          yandex-tank -c ${GITHUB_WORKSPACE}/sprint3/problems/stress/solution/load.yaml ${GITHUB_WORKSPACE}/sprint3/problems/stress/solution/ammo.txt
-##          pytest --junitxml=${GITHUB_WORKSPACE}/stress.xml ${GITHUB_WORKSPACE}/cpp-backend-tests-practicum/tests/test_s03_stress.py
-##        env:
-##          DIRECTORY: ${{ github.workspace }}/sprint3/problems/stress/solution/logs
-#
       - name: Publish XML reports
         uses: EnricoMi/publish-unit-test-result-action@v2
         if: always()
@@ -362,6 +362,9 @@ jobs:
 
       - name: Install dependencies
         run: |
+          python3 -m venv .venv
+          source .venv/bin/activate
+          pip install -r requirements.txt
           cp -R /home/forconan/.conan /github/home/.conan
 
       - name: run tests sprint4 db_of_books
