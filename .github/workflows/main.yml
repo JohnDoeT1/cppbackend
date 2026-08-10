@@ -1,5 +1,4 @@
-python3 << 'EOF'
-content = """name: autotests
+name: autotests
 
 on:
   pull_request:
@@ -153,12 +152,10 @@ jobs:
           cd cpp-backend-tests-practicum/scripts/sprint2
           ./command_line/run.sh
 
-
   sprint_3:
     if: github.repository_owner != 'cpppracticum'
     runs-on: ubuntu-22.04
     steps:
-
       - name: Checkout code & tests
         uses: actions/checkout@v3
         with:
@@ -266,7 +263,6 @@ jobs:
     if: github.repository_owner != 'cpppracticum'
     runs-on: ubuntu-22.04
     steps:
-
       - name: Checkout code & tests
         uses: actions/checkout@v3
         with:
@@ -306,7 +302,6 @@ jobs:
         ports:
           - 8080:8080
     steps:
-
       - name: Checkout code & tests
         uses: actions/checkout@v3
         with:
@@ -335,7 +330,6 @@ jobs:
         with:
           junit_files: ${{ github.workspace }}/*.xml
 
-
   sprint_4_with_postgress:
     if: github.repository_owner != 'cpppracticum'
     runs-on: ubuntu-22.04
@@ -353,7 +347,6 @@ jobs:
           POSTGRES_PASSWORD: Mys3Cr3t
           POSTGRES_HOST: postgres
           POSTGRES_PORT: 5432
-
     steps:
       - name: get docker network
         run: |
@@ -397,9 +390,3 @@ jobs:
         if: always()
         with:
           junit_files: ${{ github.workspace }}/*.xml
-"""
-
-with open("/home/JohnDoe/cppbackend/.github/workflows/main.yml", "w") as f:
-    f.write(content)
-print("Done!")
-EOF
