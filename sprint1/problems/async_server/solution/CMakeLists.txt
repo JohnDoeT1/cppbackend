@@ -6,9 +6,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 find_package(Boost 1.78.0 REQUIRED)
 
+set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 add_executable(
     hello_async
