@@ -18,6 +18,17 @@
 # Generated files
 .idea/**/contentModel.xml
 
+# Conan/CMake generated files
+sprint1/problems/*/solution/*.cmake
+sprint1/problems/*/solution/CMakePresets.json
+sprint1/problems/*/solution/conan.lock
+sprint1/problems/*/solution/conan_toolchain.cmake
+sprint1/problems/*/solution/conanbuildinfo.*
+sprint1/problems/*/solution/conaninfo.txt
+sprint1/problems/*/solution/graph_info.json
+
+# Build directories
+**/build/
 # Sensitive or high-churn files
 .idea/**/dataSources/
 .idea/**/dataSources.ids
