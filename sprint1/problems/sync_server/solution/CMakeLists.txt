@@ -18,7 +18,7 @@ find_package(Threads REQUIRED)
 
 add_executable(
     hello
-    src/main.cpp
+    main.cpp
 )
 
 
