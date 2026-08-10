@@ -22,27 +22,31 @@ public:
     }
 
 
-    void StartFry(GasCooker& cooker, Handler handler) {
+void StartFry(GasCooker& cooker, Handler handler) {
 
-        if (frying_start_time_) {
-            throw std::logic_error("Frying already started");
-        }
-
-
-        gas_cooker_lock_ =
-            GasCookerLock{cooker.shared_from_this()};
-
-
-        cooker.UseBurner(
-            [self = shared_from_this(),
-             handler = std::move(handler)] {
-
-                self->frying_start_time_ =
-                    Clock::now();
-
-                handler();
-            });
+    if (frying_start_time_) {
+        throw std::logic_error("Frying already started");
     }
+
+
+    cooker.UseBurner(
+        [self = shared_from_this(),
+         &cooker,
+         handler = std::move(handler)] {
+
+            self->gas_cooker_lock_ =
+                GasCookerLock{
+                    cooker.shared_from_this()
+                };
+
+
+            self->frying_start_time_ =
+                Clock::now();
+
+
+            handler();
+        });
+}
 
 
     void StopFry() {
@@ -112,28 +116,31 @@ public:
     }
 
 
-    void StartBake(GasCooker& cooker, Handler handler) {
+void StartBake(GasCooker& cooker, Handler handler) {
 
-        if (baking_start_time_) {
-            throw std::logic_error(
-                "Baking already started");
-        }
-
-
-        gas_cooker_lock_ =
-            GasCookerLock{cooker.shared_from_this()};
-
-
-        cooker.UseBurner(
-            [self = shared_from_this(),
-             handler = std::move(handler)] {
-
-                self->baking_start_time_ =
-                    Clock::now();
-
-                handler();
-            });
+    if (baking_start_time_) {
+        throw std::logic_error("Baking already started");
     }
+
+
+    cooker.UseBurner(
+        [self = shared_from_this(),
+         &cooker,
+         handler = std::move(handler)] {
+
+            self->gas_cooker_lock_ =
+                GasCookerLock{
+                    cooker.shared_from_this()
+                };
+
+
+            self->baking_start_time_ =
+                Clock::now();
+
+
+            handler();
+        });
+}
 
 
 

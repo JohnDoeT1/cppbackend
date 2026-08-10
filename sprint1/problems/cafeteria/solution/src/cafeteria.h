@@ -98,7 +98,7 @@ void Start() {
             // Оставляем запас, чтобы фактическое время
             // не вышло за пределы HotDog.
             self->sausage_timer_.expires_after(
-                Milliseconds{1700}
+                Milliseconds{1500}
             );
 
 
@@ -125,7 +125,7 @@ void Start() {
         [self] {
 
             self->bread_timer_.expires_after(
-                Milliseconds{1200}
+                Milliseconds{1000}
             );
 
 
