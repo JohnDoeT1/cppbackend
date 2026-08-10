@@ -7,7 +7,6 @@
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/strand.hpp>
 #include <boost/asio/bind_executor.hpp>
-#include <boost/asio/post.hpp>
 #include <memory>
 #include <chrono>
 
@@ -45,7 +44,14 @@ class Cafeteria {
 
 public:
     explicit Cafeteria(net::io_context& io)
-        : io_{io} {
+        : io_{io}
+        , work_(net::make_work_guard(io)) {
+        // Таймер для сброса work_guard через 10 секунд,
+        // чтобы io_context мог завершиться после приготовления всех заказов
+        auto shutdown_timer = std::make_shared<net::steady_timer>(io_, std::chrono::seconds(10));
+        shutdown_timer->async_wait([this, shutdown_timer](boost::system::error_code) {
+            work_.reset();
+        });
     }
 
     void OrderHotDog(HotDogHandler handler) {
@@ -98,6 +104,7 @@ private:
     }
 
     net::io_context& io_;
+    net::executor_work_guard<net::io_context::executor_type> work_;
     Store store_;
     std::shared_ptr<GasCooker> gas_cooker_ = std::make_shared<GasCooker>(io_);
 };
