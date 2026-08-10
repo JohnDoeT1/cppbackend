@@ -11,6 +11,7 @@
 
 #include <memory>
 #include <functional>
+#include <mutex>
 
 
 #include "hotdog.h"
@@ -39,13 +40,26 @@ public:
 
     void OrderHotDog(HotDogHandler handler) {
 
+        std::shared_ptr<Sausage> sausage;
+        std::shared_ptr<Bread> bread;
+
+
+        // Store не потокобезопасен.
+        // Защищаем получение ингредиентов.
+        {
+            std::lock_guard lock(store_mutex_);
+
+            sausage = store_.GetSausage();
+            bread = store_.GetBread();
+        }
+
 
         auto order =
             std::make_shared<Order>(
                 io_,
                 gas_cooker_,
-                store_.GetSausage(),
-                store_.GetBread(),
+                std::move(sausage),
+                std::move(bread),
                 std::move(handler)
             );
 
@@ -78,73 +92,70 @@ private:
             , sausage_{std::move(sausage)}
             , bread_{std::move(bread)}
             , handler_{std::move(handler)}
-            , sausage_timer_{io}
-            , bread_timer_{io}
+            , sausage_timer_{strand_}
+            , bread_timer_{strand_}
         {
         }
 
 
 
-void Start() {
+        void Start() {
 
-    auto self = shared_from_this();
+            auto self = shared_from_this();
 
 
-    sausage_->StartFry(
-        *cooker_,
-        [self] {
+            sausage_->StartFry(
+                *cooker_,
+                [self] {
 
-            // Не берём максимум 2000 мс.
-            // Оставляем запас, чтобы фактическое время
-            // не вышло за пределы HotDog.
-            self->sausage_timer_.expires_after(
-                Milliseconds{1500}
+                    self->sausage_timer_.expires_after(
+                        Milliseconds{1500}
+                    );
+
+
+                    self->sausage_timer_.async_wait(
+                        net::bind_executor(
+                            self->strand_,
+                            [self](sys::error_code ec) {
+
+                                if (ec) {
+                                    return;
+                                }
+
+                                self->OnSausageReady();
+                            }
+                        )
+                    );
+                }
             );
 
 
-            self->sausage_timer_.async_wait(
-                net::bind_executor(
-                    self->strand_,
-                    [self](sys::error_code ec) {
 
-                        if (ec) {
-                            return;
-                        }
+            bread_->StartBake(
+                *cooker_,
+                [self] {
 
-                        self->OnSausageReady();
-                    }
-                )
+                    self->bread_timer_.expires_after(
+                        Milliseconds{1000}
+                    );
+
+
+                    self->bread_timer_.async_wait(
+                        net::bind_executor(
+                            self->strand_,
+                            [self](sys::error_code ec) {
+
+                                if (ec) {
+                                    return;
+                                }
+
+                                self->OnBreadReady();
+                            }
+                        )
+                    );
+                }
             );
         }
-    );
-
-
-
-    bread_->StartBake(
-        *cooker_,
-        [self] {
-
-            self->bread_timer_.expires_after(
-                Milliseconds{1000}
-            );
-
-
-            self->bread_timer_.async_wait(
-                net::bind_executor(
-                    self->strand_,
-                    [self](sys::error_code ec) {
-
-                        if (ec) {
-                            return;
-                        }
-
-                        self->OnBreadReady();
-                    }
-                )
-            );
-        }
-    );
-}
 
 
 
@@ -173,32 +184,32 @@ void Start() {
 
 
 
-void TryFinish() {
+        void TryFinish() {
 
-    if (!sausage_ready_
-        || !bread_ready_) {
+            if (!sausage_ready_
+                || !bread_ready_) {
 
-        return;
-    }
-
-
-    try {
-
-        handler_(
-            HotDog{
-                ++next_id_,
-                sausage_,
-                bread_
+                return;
             }
-        );
 
-    } catch (...) {
 
-        handler_(
-            Result<HotDog>::FromCurrentException()
-        );
-    }
-}
+            try {
+
+                handler_(
+                    HotDog{
+                        ++next_id_,
+                        sausage_,
+                        bread_
+                    }
+                );
+
+            } catch (...) {
+
+                handler_(
+                    Result<HotDog>::FromCurrentException()
+                );
+            }
+        }
 
 
 
@@ -233,7 +244,7 @@ void TryFinish() {
         bool bread_ready_ = false;
 
 
-        inline static int next_id_ = 0;
+        inline static std::atomic<int> next_id_{0};
     };
 
 
@@ -244,6 +255,8 @@ private:
 
 
     Store store_;
+
+    std::mutex store_mutex_;
 
 
     std::shared_ptr<GasCooker> gas_cooker_ =
