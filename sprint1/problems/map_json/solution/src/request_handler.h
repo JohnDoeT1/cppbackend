@@ -72,7 +72,7 @@ public:
     }
 
 private:
-    std::string MakeError(std::string_view code, std::string_view message) {
+    std::string MakeError(const std::string& code, const std::string& message) {
         json::object obj;
         obj["code"] = code;
         obj["message"] = message;
