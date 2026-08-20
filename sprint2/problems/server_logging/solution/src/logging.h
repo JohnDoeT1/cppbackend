@@ -7,8 +7,6 @@
 #include <boost/log/utility/manipulators/add_value.hpp>
 #include <boost/log/attributes.hpp>
 #include <boost/date_time.hpp>
-#include <boost/property_tree/ptree.hpp>
-#include <boost/property_tree/json_parser.hpp>
 #include <string>
 #include <iostream>
 #include <sstream>
