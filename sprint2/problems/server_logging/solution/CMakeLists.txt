@@ -11,6 +11,17 @@ find_package(Boost REQUIRED COMPONENTS
     system
 )
 
+# Скачиваем Boost.JSON (header-only)
+include(FetchContent)
+FetchContent_Declare(
+    boost_json
+    URL https://github.com/boostorg/json/archive/refs/tags/boost-1.78.0.tar.gz
+)
+FetchContent_GetProperties(boost_json)
+if(NOT boost_json_POPULATED)
+    FetchContent_Populate(boost_json)
+endif()
+
 add_executable(game_server 
     src/main.cpp
     src/http_server.cpp
@@ -19,7 +30,11 @@ add_executable(game_server
     src/request_handler.cpp
 )
 
-target_include_directories(game_server PRIVATE src)
+target_include_directories(game_server PRIVATE 
+    src
+    ${boost_json_SOURCE_DIR}/include
+)
+
 target_link_libraries(game_server PRIVATE 
     Boost::log
     Boost::log_setup

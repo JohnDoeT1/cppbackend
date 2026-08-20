@@ -1,136 +1,60 @@
 #include "json_loader.h"
 
+#include <boost/json.hpp>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
-#include <string>
-#include <vector>
+
+namespace json = boost::json;
 
 namespace json_loader {
 
-// Простой JSON парсер для конфигурации
-namespace {
-
-std::string GetStringValue(const std::string& json, const std::string& key) {
-    std::string search_key = "\"" + key + "\"";
-    size_t pos = json.find(search_key);
-    if (pos == std::string::npos) return "";
-    
-    pos = json.find(":", pos + search_key.length());
-    if (pos == std::string::npos) return "";
-    
-    pos = json.find("\"", pos + 1);
-    if (pos == std::string::npos) return "";
-    
-    size_t end = json.find("\"", pos + 1);
-    if (end == std::string::npos) return "";
-    
-    return json.substr(pos + 1, end - pos - 1);
-}
-
-int GetIntValue(const std::string& json, const std::string& key) {
-    std::string search_key = "\"" + key + "\"";
-    size_t pos = json.find(search_key);
-    if (pos == std::string::npos) return 0;
-    
-    pos = json.find(":", pos + search_key.length());
-    if (pos == std::string::npos) return 0;
-    
-    // Пропускаем пробелы
-    pos++;
-    while (pos < json.length() && (json[pos] == ' ' || json[pos] == '\t')) {
-        pos++;
-    }
-    
-    // Читаем число
-    std::string number;
-    while (pos < json.length() && (isdigit(json[pos]) || json[pos] == '-')) {
-        number += json[pos];
-        pos++;
-    }
-    
-    return number.empty() ? 0 : std::stoi(number);
-}
-
-std::vector<std::string> GetArrayItems(const std::string& json, const std::string& key) {
-    std::vector<std::string> items;
-    std::string search_key = "\"" + key + "\"";
-    size_t pos = json.find(search_key);
-    if (pos == std::string::npos) return items;
-    
-    pos = json.find("[", pos + search_key.length());
-    if (pos == std::string::npos) return items;
-    
-    // Ищем все объекты в массиве
-    size_t depth = 0;
-    size_t start = std::string::npos;
-    
-    for (size_t i = pos; i < json.length(); i++) {
-        if (json[i] == '{') {
-            if (depth == 0) {
-                start = i;
-            }
-            depth++;
-        } else if (json[i] == '}') {
-            depth--;
-            if (depth == 0 && start != std::string::npos) {
-                items.push_back(json.substr(start, i - start + 1));
-                start = std::string::npos;
-            }
-        }
-    }
-    
-    return items;
-}
-
-} // namespace
-
-model::Road ParseRoad(const std::string& obj) {
+model::Road ParseRoad(const json::object& obj) {
     model::Point start{
-        GetIntValue(obj, "x0"),
-        GetIntValue(obj, "y0")
+        static_cast<int>(obj.at("x0").as_int64()),
+        static_cast<int>(obj.at("y0").as_int64())
     };
-    if (obj.find("\"x1\"") != std::string::npos) {
+    if (obj.contains("x1")) {
         return model::Road(model::Road::HORIZONTAL, start, 
-                          GetIntValue(obj, "x1"));
+                          static_cast<int>(obj.at("x1").as_int64()));
     }
     return model::Road(model::Road::VERTICAL, start,
-                      GetIntValue(obj, "y1"));
+                      static_cast<int>(obj.at("y1").as_int64()));
 }
 
-model::Building ParseBuilding(const std::string& obj) {
+model::Building ParseBuilding(const json::object& obj) {
     return model::Building(model::Rectangle{
-        {GetIntValue(obj, "x"),
-         GetIntValue(obj, "y")},
-        {GetIntValue(obj, "w"),
-         GetIntValue(obj, "h")}
+        {static_cast<int>(obj.at("x").as_int64()),
+         static_cast<int>(obj.at("y").as_int64())},
+        {static_cast<int>(obj.at("w").as_int64()),
+         static_cast<int>(obj.at("h").as_int64())}
     });
 }
 
-model::Office ParseOffice(const std::string& obj) {
+model::Office ParseOffice(const json::object& obj) {
     return model::Office(
-        model::Office::Id(GetStringValue(obj, "id")),
-        {GetIntValue(obj, "x"),
-         GetIntValue(obj, "y")},
-        {GetIntValue(obj, "offsetX"),
-         GetIntValue(obj, "offsetY")}
+        model::Office::Id(json::value_to<std::string>(obj.at("id"))),
+        {static_cast<int>(obj.at("x").as_int64()),
+         static_cast<int>(obj.at("y").as_int64())},
+        {static_cast<int>(obj.at("offsetX").as_int64()),
+         static_cast<int>(obj.at("offsetY").as_int64())}
     );
 }
 
-model::Map ParseMap(const std::string& obj) {
+model::Map ParseMap(const json::object& obj) {
     model::Map map(
-        model::Map::Id(GetStringValue(obj, "id")),
-        GetStringValue(obj, "name")
+        model::Map::Id(json::value_to<std::string>(obj.at("id"))),
+        json::value_to<std::string>(obj.at("name"))
     );
     
-    for (const auto& road : GetArrayItems(obj, "roads")) {
-        map.AddRoad(ParseRoad(road));
+    for (const auto& road : obj.at("roads").as_array()) {
+        map.AddRoad(ParseRoad(road.as_object()));
     }
-    for (const auto& building : GetArrayItems(obj, "buildings")) {
-        map.AddBuilding(ParseBuilding(building));
+    for (const auto& building : obj.at("buildings").as_array()) {
+        map.AddBuilding(ParseBuilding(building.as_object()));
     }
-    for (const auto& office : GetArrayItems(obj, "offices")) {
-        map.AddOffice(ParseOffice(office));
+    for (const auto& office : obj.at("offices").as_array()) {
+        map.AddOffice(ParseOffice(office.as_object()));
     }
     
     return map;
@@ -144,11 +68,11 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
     
     std::stringstream ss;
     ss << file.rdbuf();
-    std::string content = ss.str();
+    auto value = json::parse(ss.str());
     
     model::Game game;
-    for (const auto& map : GetArrayItems(content, "maps")) {
-        game.AddMap(ParseMap(map));
+    for (const auto& map : value.at("maps").as_array()) {
+        game.AddMap(ParseMap(map.as_object()));
     }
     
     return game;
