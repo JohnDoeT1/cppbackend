@@ -3,10 +3,12 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/signal_set.hpp>
 #include <boost/asio/ip/address.hpp>
+#include <boost/beast/http.hpp>
 #include <iostream>
 #include <thread>
 #include <filesystem>
 #include <sstream>
+#include <chrono>
 
 #include "json_loader.h"
 #include "request_handler.h"
@@ -15,6 +17,7 @@
 using namespace std::literals;
 namespace net = boost::asio;
 namespace fs = std::filesystem;
+namespace http = boost::beast::http;
 
 namespace {
 
@@ -85,12 +88,6 @@ int main(int argc, const char* argv[]) {
         
         http_server::ServeHttp(ioc, {address, port}, [&handler](auto&& req, auto&& send) {
             // Логируем запрос
-            std::string ip = "unknown";
-            if (req.base().count("X-Forwarded-For") > 0) {
-                ip = std::string(req.base()["X-Forwarded-For"]);
-            }
-            
-            // Не можем получить IP здесь, но можем получить URI и method
             std::ostringstream req_data;
             req_data << "{\"ip\":\"unknown\","
                      << "\"URI\":\"" << std::string(req.target()) << "\","
