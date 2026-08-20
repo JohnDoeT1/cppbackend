@@ -6,40 +6,43 @@
 #include <boost/log/utility/setup/common_attributes.hpp>
 #include <boost/log/utility/manipulators/add_value.hpp>
 #include <boost/log/attributes.hpp>
-#include <boost/json.hpp>
 #include <boost/date_time.hpp>
+#include <boost/property_tree/ptree.hpp>
+#include <boost/property_tree/json_parser.hpp>
 #include <string>
 #include <iostream>
+#include <sstream>
 
-namespace json = boost::json;
 namespace logging = boost::log;
 namespace keywords = boost::log::keywords;
 
 BOOST_LOG_ATTRIBUTE_KEYWORD(timestamp, "TimeStamp", boost::posix_time::ptime)
-BOOST_LOG_ATTRIBUTE_KEYWORD(additional_data, "AdditionalData", json::value)
+BOOST_LOG_ATTRIBUTE_KEYWORD(additional_data, "AdditionalData", std::string)
 
 // Форматтер для вывода в JSON
 inline void JsonFormatter(logging::record_view const& rec, logging::formatting_ostream& strm) {
-    json::object log_entry;
+    std::ostringstream oss;
+    oss << "{";
     
     // Добавляем timestamp
     if (auto ts = rec[timestamp]) {
-        log_entry["timestamp"] = json::string(to_iso_extended_string(*ts));
+        oss << "\"timestamp\":\"" << to_iso_extended_string(*ts) << "\",";
     }
     
     // Добавляем data
     if (auto data = rec[additional_data]) {
-        log_entry["data"] = *data;
+        oss << "\"data\":" << *data << ",";
     } else {
-        log_entry["data"] = json::object{};
+        oss << "\"data\":{},";
     }
     
     // Добавляем message
     if (auto msg = rec[logging::expressions::smessage]) {
-        log_entry["message"] = json::string(*msg);
+        oss << "\"message\":\"" << *msg << "\"";
     }
     
-    strm << json::serialize(log_entry);
+    oss << "}";
+    strm << oss.str();
 }
 
 // Инициализация логирования
