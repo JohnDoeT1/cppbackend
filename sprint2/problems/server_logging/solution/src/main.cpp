@@ -80,7 +80,7 @@ int main(int argc, const char* argv[]) {
             }
         });
 
-        // Создаем обработчик запросов с логированием
+        // Создаем обработчик запросов
         http_handler::RequestHandler handler{game, static_path};
 
         const auto address = net::ip::make_address("0.0.0.0");
@@ -137,13 +137,7 @@ int main(int argc, const char* argv[]) {
             << "server exited";
             
     } catch (const std::exception& ex) {
-        std::ostringstream error_data;
-        error_data << "{\"code\":1,\"exception\":\"" << ex.what() << "\"}";
-        BOOST_LOG_TRIVIAL(error) 
-            << logging::add_value(additional_data, error_data.str())
-            << "server exited";
-        
-        std::cerr << ex.what() << std::endl;
+        std::cerr << "Error: " << ex.what() << std::endl;
         return EXIT_FAILURE;
     }
     
