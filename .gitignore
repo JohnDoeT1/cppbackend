@@ -743,7 +743,15 @@ sprint3/problems/flamegraph/solution/graph.svg
 **/.DS_Store
 
 # Conan generated files (все спринты)
-sprint*/problems/*/solution/conan*
+sprint*/problems/*/solution/conan_toolchain.cmake
+sprint*/problems/*/solution/conanbuild.sh
+sprint*/problems/*/solution/conanrun.sh
+sprint*/problems/*/solution/conanbuildenv-*.sh
+sprint*/problems/*/solution/conanrunenv-*.sh
+sprint*/problems/*/solution/conandeps_legacy.cmake
+sprint*/problems/*/solution/conanbuildinfo.*
+sprint*/problems/*/solution/conaninfo.txt
+sprint*/problems/*/solution/conan.lock
 sprint*/problems/*/solution/deactivate_conan*
 sprint*/problems/*/solution/*Config.cmake
 sprint*/problems/*/solution/*Targets.cmake
