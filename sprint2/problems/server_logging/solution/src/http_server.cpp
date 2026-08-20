@@ -7,10 +7,8 @@ namespace http_server {
 
 // Запускает сессию: инициирует первое чтение запроса
 void SessionBase::Run() {
-    net::dispatch(
-        stream_.get_executor(),
-        beast::bind_front_handler(&SessionBase::Read, GetSharedThis())
-    );
+    // Запускаем чтение напрямую, без dispatch
+    Read();
 }
 
 // Читает HTTP-запрос из сокета

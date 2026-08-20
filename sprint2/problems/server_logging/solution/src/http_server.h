@@ -113,10 +113,23 @@ class Listener : public std::enable_shared_from_this<Listener<RequestHandler>> {
 public:
     Listener(net::io_context& ioc, tcp::endpoint endpoint, RequestHandler handler)
         : acceptor_(ioc), request_handler_(std::move(handler)) {
-        acceptor_.open(endpoint.protocol());
-        acceptor_.set_option(net::socket_base::reuse_address(true));
-        acceptor_.bind(endpoint);
-        acceptor_.listen();
+        boost::system::error_code ec;
+        acceptor_.open(endpoint.protocol(), ec);
+        if (ec) {
+            throw std::runtime_error("Failed to open acceptor: " + ec.message());
+        }
+        acceptor_.set_option(net::socket_base::reuse_address(true), ec);
+        if (ec) {
+            throw std::runtime_error("Failed to set reuse_address: " + ec.message());
+        }
+        acceptor_.bind(endpoint, ec);
+        if (ec) {
+            throw std::runtime_error("Failed to bind to " + endpoint.address().to_string() + ":" + std::to_string(endpoint.port()) + ": " + ec.message());
+        }
+        acceptor_.listen(net::socket_base::max_listen_connections, ec);
+        if (ec) {
+            throw std::runtime_error("Failed to listen: " + ec.message());
+        }
     }
 
     // Запускает прослушивание входящих подключений
@@ -129,9 +142,13 @@ private:
     void DoAccept() {
         acceptor_.async_accept(
             [self = this->shared_from_this()](beast::error_code ec, tcp::socket socket) {
-                if (!ec) {
-                    self->AsyncRunSession(std::move(socket));
+                if (ec) {
+                    if (ec != net::error::operation_aborted) {
+                        std::cerr << "Accept error: " << ec.message() << std::endl;
+                    }
+                    return;
                 }
+                self->AsyncRunSession(std::move(socket));
                 self->DoAccept();
             }
         );
