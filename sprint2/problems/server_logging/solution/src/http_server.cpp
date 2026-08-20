@@ -2,7 +2,6 @@
 
 #include <boost/asio/dispatch.hpp>
 #include <iostream>
-#include <exception>
 
 namespace http_server {
 
@@ -12,6 +11,7 @@ void SessionBase::Run() {
 
 void SessionBase::Read() {
     request_ = {};
+    buffer_.consume(buffer_.size());  // очищаем буфер перед чтением
     stream_.expires_after(std::chrono::seconds(30));
 
     http::async_read(
@@ -30,25 +30,8 @@ void SessionBase::OnRead(beast::error_code ec, std::size_t) {
         return ReportError(ec, "read");
     }
 
-    try {
-        HandleRequest(std::move(request_));
-    } catch (const std::exception& ex) {
-        ReportError(beast::error_code(1, beast::generic_category()), ex.what());
-        http::response<http::string_body> res(http::status::internal_server_error, 11);
-        res.set(http::field::content_type, "text/plain");
-        res.body() = "Internal Server Error";
-        res.content_length(res.body().size());
-        res.keep_alive(false);
-        Write(std::move(res));
-    } catch (...) {
-        ReportError(beast::error_code(1, beast::generic_category()), "unknown error");
-        http::response<http::string_body> res(http::status::internal_server_error, 11);
-        res.set(http::field::content_type, "text/plain");
-        res.body() = "Internal Server Error";
-        res.content_length(res.body().size());
-        res.keep_alive(false);
-        Write(std::move(res));
-    }
+    // Обрабатываем запрос. Если обработчик бросит исключение, закроем соединение.
+    HandleRequest(std::move(request_));
 }
 
 void SessionBase::OnWrite(bool close, beast::error_code ec, std::size_t) {
@@ -58,16 +41,7 @@ void SessionBase::OnWrite(bool close, beast::error_code ec, std::size_t) {
     if (close) {
         return Close();
     }
-
-    try {
-        Read();
-    } catch (const std::exception& ex) {
-        ReportError(beast::error_code(1, beast::generic_category()), ex.what());
-        Close();
-    } catch (...) {
-        ReportError(beast::error_code(1, beast::generic_category()), "unknown error");
-        Close();
-    }
+    Read();
 }
 
 void SessionBase::Close() {

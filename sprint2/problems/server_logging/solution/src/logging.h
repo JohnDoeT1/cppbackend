@@ -21,16 +21,19 @@ inline void JsonFormatter(logging::record_view const& rec, logging::formatting_o
     std::ostringstream oss;
     oss << "{";
     
+    // Проверяем наличие timestamp
     if (auto ts = rec[timestamp]) {
         oss << "\"timestamp\":\"" << to_iso_extended_string(*ts) << "\",";
     }
     
+    // Добавляем data
     if (auto data = rec[additional_data]) {
         oss << "\"data\":" << *data << ",";
     } else {
         oss << "\"data\":{},";
     }
     
+    // Добавляем message
     if (auto msg = rec[logging::expressions::smessage]) {
         oss << "\"message\":\"" << *msg << "\"";
     }

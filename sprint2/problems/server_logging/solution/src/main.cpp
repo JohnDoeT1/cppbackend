@@ -46,6 +46,7 @@ int main(int argc, const char* argv[]) {
         const std::string config_path = argv[1];
         const std::string static_path = argv[2];
         
+        // Логируем запуск сервера
         std::ostringstream start_data;
         start_data << "{\"port\":8080,\"address\":\"0.0.0.0\"}";
         BOOST_LOG_TRIVIAL(info) 
@@ -80,46 +81,15 @@ int main(int argc, const char* argv[]) {
         constexpr unsigned short port = 8080;
         
         http_server::ServeHttp(ioc, {address, port}, [&handler](auto&& req, auto&& send) {
-            std::ostringstream req_data;
-            req_data << "{\"ip\":\"unknown\","
-                     << "\"URI\":\"" << std::string(req.target()) << "\","
-                     << "\"method\":\"" << std::string(req.method_string()) << "\"}";
-            
-            BOOST_LOG_TRIVIAL(info) 
-                << logging::add_value(additional_data, req_data.str())
-                << "request received";
-            
-            auto start = std::chrono::steady_clock::now();
-            
-            handler(std::forward<decltype(req)>(req), [send = std::forward<decltype(send)>(send), start](auto&& response) {
-                auto end = std::chrono::steady_clock::now();
-                auto response_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
-                
-                std::ostringstream resp_data;
-                resp_data << "{\"ip\":\"unknown\","
-                          << "\"response_time\":" << response_time << ","
-                          << "\"code\":" << response.result_int() << ",";
-                
-                auto content_type = response.find(http::field::content_type);
-                if (content_type != response.end()) {
-                    resp_data << "\"content_type\":\"" << std::string(content_type->value()) << "\"";
-                } else {
-                    resp_data << "\"content_type\":null";
-                }
-                resp_data << "}";
-                
-                BOOST_LOG_TRIVIAL(info) 
-                    << logging::add_value(additional_data, resp_data.str())
-                    << "response sent";
-                
-                send(std::move(response));
-            });
+            // Просто передаём запрос обработчику без логирования
+            handler(std::forward<decltype(req)>(req), std::forward<decltype(send)>(send));
         });
 
         RunWorkers(std::max(1u, num_threads), [&ioc] {
             ioc.run();
         });
         
+        // Логируем остановку сервера
         std::ostringstream exit_data;
         exit_data << "{\"code\":0}";
         BOOST_LOG_TRIVIAL(info) 
