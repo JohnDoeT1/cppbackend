@@ -741,3 +741,41 @@ sprint3/problems/flamegraph/solution/graph.svg
 *.xml
 
 **/.DS_Store
+
+# Conan generated files (все спринты)
+sprint*/problems/*/solution/conan*
+sprint*/problems/*/solution/deactivate_conan*
+sprint*/problems/*/solution/*Config.cmake
+sprint*/problems/*/solution/*Targets.cmake
+sprint*/problems/*/solution/*-data.cmake
+sprint*/problems/*/solution/module-*.cmake
+sprint*/problems/*/solution/Find*.cmake
+sprint*/problems/*/solution/cmakedeps_macros.cmake
+sprint*/problems/*/solution/CMakePresets.json
+
+# CMake build artifacts
+sprint*/problems/*/solution/CMakeFiles/
+sprint*/problems/*/solution/CMakeCache.txt
+sprint*/problems/*/solution/cmake_install.cmake
+sprint*/problems/*/solution/Makefile
+sprint*/problems/*/solution/bin/
+
+# Дополнительные Conan сгенерированные файлы
+sprint2/problems/static_content/solution/BZip2-*
+sprint2/problems/static_content/solution/Boost-*
+sprint2/problems/static_content/solution/ZLIB-*
+sprint2/problems/static_content/solution/libbacktrace-*
+sprint2/problems/static_content/solution/module-*
+sprint2/problems/static_content/solution/Find*.cmake
+sprint2/problems/static_content/solution/*ConfigVersion.cmake
+sprint2/problems/static_content/solution/*Target-release.cmake
+sprint2/problems/static_content/solution/*-release-x86_64-data.cmake
+sprint2/problems/static_content/solution/cmakedeps_macros.cmake
+sprint2/problems/static_content/solution/conan_toolchain.cmake
+sprint2/problems/static_content/solution/conanbuild.sh
+sprint2/problems/static_content/solution/conanrun.sh
+sprint2/problems/static_content/solution/conanbuildenv-*.sh
+sprint2/problems/static_content/solution/conanrunenv-*.sh
+sprint2/problems/static_content/solution/deactivate_conan*
+sprint2/problems/static_content/solution/conandeps_legacy.cmake
+sprint2/problems/static_content/solution/CMakePresets.json
