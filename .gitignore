@@ -29,6 +29,7 @@ sprint1/problems/*/solution/graph_info.json
 
 # Build directories
 **/build/
+**/build_test/
 # Sensitive or high-churn files
 .idea/**/dataSources/
 .idea/**/dataSources.ids

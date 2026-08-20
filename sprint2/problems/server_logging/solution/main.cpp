@@ -32,6 +32,10 @@ public:
 
 // Функция для логирования сетевых ошибок
 void LogNetworkError(const beast::error_code& ec, const std::string& where) {
+    if (ec == net::error::eof || ec == beast::error::timeout) {
+        return; // Не логируем нормальное завершение соединения
+    }
+    
     std::ostringstream data;
     data << "{" << MakeJson("code", std::to_string(ec.value())) << ","
          << MakeJson("text", ec.message()) << ","
@@ -116,7 +120,8 @@ private:
                     LogNetworkError(ec, "write");
                     return;
                 }
-                self->socket_.shutdown(tcp::socket::shutdown_send, ec);
+                beast::error_code shutdown_ec;
+                self->socket_.shutdown(tcp::socket::shutdown_send, shutdown_ec);
             });
     }
 
@@ -145,16 +150,23 @@ int main(int argc, char* argv[]) {
             << logging::add_value(additional_data, start_data.str())
             << "server started";
         
-        net::io_context ioc{1};
+        net::io_context ioc;
         tcp::acceptor acceptor{ioc, {address, port}};
         
         RequestHandler handler;
         LoggingRequestHandler<RequestHandler> logging_handler(handler);
         
-        for (;;) {
+        // Основной цикл обработки соединений
+        while (true) {
             tcp::socket socket{ioc};
             acceptor.accept(socket);
-            std::make_shared<Session>(std::move(socket), logging_handler)->Run();
+            
+            auto session = std::make_shared<Session>(std::move(socket), logging_handler);
+            session->Run();
+            
+            // Запускаем обработку асинхронных операций
+            ioc.run();
+            ioc.restart();
         }
         
     } catch (const std::exception& e) {
