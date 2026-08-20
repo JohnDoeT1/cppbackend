@@ -9,10 +9,12 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Скачиваем и устанавливаем Boost.JSON
+# Boost.JSON уже включён в libboost-all-dev для Ubuntu 22.04
+# Но если нужна именно версия 1.78+, используйте:
 RUN cd /tmp \
     && wget https://github.com/boostorg/json/archive/refs/tags/boost-1.78.0.tar.gz \
     && tar -xzf boost-1.78.0.tar.gz \
+    && cp json-boost-1.78.0/include/boost/json.hpp /usr/include/boost/ \
     && cp -r json-boost-1.78.0/include/boost/json /usr/include/boost/ \
     && rm -rf boost-1.78.0.tar.gz json-boost-1.78.0
 
