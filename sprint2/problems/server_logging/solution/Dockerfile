@@ -9,7 +9,6 @@ RUN apt-get update && apt-get install -y \
     wget \
     && rm -rf /var/lib/apt/lists/*
 
-# Скачиваем Boost.JSON в /usr/local/src
 RUN cd /tmp \
     && wget https://github.com/boostorg/json/archive/refs/tags/boost-1.78.0.tar.gz \
     && tar -xzf boost-1.78.0.tar.gz \
@@ -20,7 +19,6 @@ WORKDIR /workspace
 
 COPY . .
 
-# Создаём минимальный конфиг и статическую папку, если их нет
 RUN mkdir -p /workspace/data /workspace/static \
     && echo '{"maps": []}' > /workspace/data/config.json
 

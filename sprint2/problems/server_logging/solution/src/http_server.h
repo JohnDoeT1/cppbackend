@@ -22,7 +22,6 @@ using tcp = net::ip::tcp;
 namespace beast = boost::beast;
 namespace http = beast::http;
 
-// Базовый класс сессии обработки HTTP-запросов
 class SessionBase {
 public:
     using HttpRequest = http::request<http::string_body>;
@@ -30,18 +29,15 @@ public:
     SessionBase(const SessionBase&) = delete;
     SessionBase& operator=(const SessionBase&) = delete;
 
-    // Запускает асинхронную обработку сессии
     void Run();
 
 protected:
-    // Конструктор принимает сокет для обмена данными с клиентом
     explicit SessionBase(tcp::socket&& socket)
         : stream_(std::move(socket)) {
     }
 
     virtual ~SessionBase() = default;
 
-    // Отправляет HTTP-ответ клиенту
     template <typename Body, typename Fields>
     void Write(http::response<Body, Fields>&& response) {
         auto safe_response = std::make_shared<http::response<Body, Fields>>(std::move(response));
@@ -56,25 +52,13 @@ protected:
     }
 
 private:
-    // Читает HTTP-запрос из сокета
     void Read();
-
-    // Обрабатывает завершение чтения запроса
     void OnRead(beast::error_code ec, std::size_t bytes_read);
-
-    // Обрабатывает завершение записи ответа
     void OnWrite(bool close, beast::error_code ec, std::size_t bytes_written);
-
-    // Закрывает соединение с клиентом
     void Close();
-
-    // Логирует ошибки
     void ReportError(beast::error_code ec, std::string_view what);
 
-    // Обрабатывает полученный запрос (реализуется в наследниках)
     virtual void HandleRequest(HttpRequest&& request) = 0;
-
-    // Возвращает shared_ptr на себя (реализуется в наследниках)
     virtual std::shared_ptr<SessionBase> GetSharedThis() = 0;
 
     beast::tcp_stream stream_;
@@ -82,7 +66,6 @@ private:
     HttpRequest request_;
 };
 
-// Конкретная реализация сессии с обработчиком запросов
 template <typename RequestHandler>
 class Session : public SessionBase, public std::enable_shared_from_this<Session<RequestHandler>> {
 public:
@@ -108,7 +91,6 @@ private:
     RequestHandler request_handler_;
 };
 
-// Слушатель входящих подключений
 template <typename RequestHandler>
 class Listener : public std::enable_shared_from_this<Listener<RequestHandler>> {
 public:
@@ -133,18 +115,15 @@ public:
         }
     }
 
-    // Запускает прослушивание входящих подключений
     void Run() {
         DoAccept();
     }
 
 private:
-    // Асинхронно принимает входящее подключение
     void DoAccept() {
         acceptor_.async_accept(
             [self = this->shared_from_this()](beast::error_code ec, tcp::socket socket) {
                 if (ec) {
-                    // При ошибке просто выходим, не пытаемся продолжать
                     return;
                 }
                 self->AsyncRunSession(std::move(socket));
@@ -153,7 +132,6 @@ private:
         );
     }
 
-    // Создаёт и запускает сессию для нового подключения
     void AsyncRunSession(tcp::socket&& socket) {
         std::make_shared<Session<RequestHandler>>(
             std::move(socket),
@@ -165,7 +143,6 @@ private:
     RequestHandler request_handler_;
 };
 
-// Запускает HTTP-сервер на указанном endpoint
 template <typename RequestHandler>
 void ServeHttp(net::io_context& ioc, const tcp::endpoint& endpoint, RequestHandler&& handler) {
     using MyListener = Listener<std::decay_t<RequestHandler>>;

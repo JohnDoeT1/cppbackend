@@ -41,33 +41,27 @@ int main(int argc, const char* argv[]) {
     }
     
     try {
-        // Инициализируем логирование
         InitLogging();
         
-        // Получаем пути из аргументов командной строки
         const std::string config_path = argv[1];
         const std::string static_path = argv[2];
         
-        // Логируем запуск сервера
         std::ostringstream start_data;
         start_data << "{\"port\":8080,\"address\":\"0.0.0.0\"}";
         BOOST_LOG_TRIVIAL(info) 
             << logging::add_value(additional_data, start_data.str())
             << "server started";
         
-        // Проверяем существование конфигурационного файла
         if (!fs::exists(config_path)) {
             std::cerr << "Error: Config file does not exist: " << config_path << std::endl;
             return EXIT_FAILURE;
         }
         
-        // Проверяем существование статической директории
         if (!fs::exists(static_path) || !fs::is_directory(static_path)) {
             std::cerr << "Error: Static directory does not exist: " << static_path << std::endl;
             return EXIT_FAILURE;
         }
         
-        // Загружаем конфигурацию игры
         model::Game game = json_loader::LoadGame(config_path);
 
         const unsigned num_threads = std::thread::hardware_concurrency();
@@ -80,14 +74,12 @@ int main(int argc, const char* argv[]) {
             }
         });
 
-        // Создаем обработчик запросов
         http_handler::RequestHandler handler{game, static_path};
 
         const auto address = net::ip::make_address("0.0.0.0");
         constexpr unsigned short port = 8080;
         
         http_server::ServeHttp(ioc, {address, port}, [&handler](auto&& req, auto&& send) {
-            // Логируем запрос
             std::ostringstream req_data;
             req_data << "{\"ip\":\"unknown\","
                      << "\"URI\":\"" << std::string(req.target()) << "\","
@@ -103,7 +95,6 @@ int main(int argc, const char* argv[]) {
                 auto end = std::chrono::steady_clock::now();
                 auto response_time = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
                 
-                // Логируем ответ
                 std::ostringstream resp_data;
                 resp_data << "{\"ip\":\"unknown\","
                           << "\"response_time\":" << response_time << ","
@@ -129,7 +120,6 @@ int main(int argc, const char* argv[]) {
             ioc.run();
         });
         
-        // Логируем остановку сервера
         std::ostringstream exit_data;
         exit_data << "{\"code\":0}";
         BOOST_LOG_TRIVIAL(info) 

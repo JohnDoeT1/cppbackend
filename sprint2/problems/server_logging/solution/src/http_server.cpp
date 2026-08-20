@@ -2,16 +2,14 @@
 
 #include <boost/asio/dispatch.hpp>
 #include <iostream>
+#include <exception>
 
 namespace http_server {
 
-// Запускает сессию: инициирует первое чтение запроса
 void SessionBase::Run() {
-    // Вызываем чтение напрямую, без dispatch
     Read();
 }
 
-// Читает HTTP-запрос из сокета
 void SessionBase::Read() {
     request_ = {};
     stream_.expires_after(std::chrono::seconds(30));
@@ -24,7 +22,6 @@ void SessionBase::Read() {
     );
 }
 
-// Обрабатывает завершение чтения запроса
 void SessionBase::OnRead(beast::error_code ec, std::size_t) {
     if (ec == http::error::end_of_stream) {
         return Close();
@@ -32,10 +29,28 @@ void SessionBase::OnRead(beast::error_code ec, std::size_t) {
     if (ec) {
         return ReportError(ec, "read");
     }
-    HandleRequest(std::move(request_));
+
+    try {
+        HandleRequest(std::move(request_));
+    } catch (const std::exception& ex) {
+        ReportError(beast::error_code(1, beast::generic_category()), ex.what());
+        http::response<http::string_body> res(http::status::internal_server_error, 11);
+        res.set(http::field::content_type, "text/plain");
+        res.body() = "Internal Server Error";
+        res.content_length(res.body().size());
+        res.keep_alive(false);
+        Write(std::move(res));
+    } catch (...) {
+        ReportError(beast::error_code(1, beast::generic_category()), "unknown error");
+        http::response<http::string_body> res(http::status::internal_server_error, 11);
+        res.set(http::field::content_type, "text/plain");
+        res.body() = "Internal Server Error";
+        res.content_length(res.body().size());
+        res.keep_alive(false);
+        Write(std::move(res));
+    }
 }
 
-// Обрабатывает завершение записи ответа
 void SessionBase::OnWrite(bool close, beast::error_code ec, std::size_t) {
     if (ec) {
         return ReportError(ec, "write");
@@ -43,10 +58,18 @@ void SessionBase::OnWrite(bool close, beast::error_code ec, std::size_t) {
     if (close) {
         return Close();
     }
-    Read();
+
+    try {
+        Read();
+    } catch (const std::exception& ex) {
+        ReportError(beast::error_code(1, beast::generic_category()), ex.what());
+        Close();
+    } catch (...) {
+        ReportError(beast::error_code(1, beast::generic_category()), "unknown error");
+        Close();
+    }
 }
 
-// Закрывает соединение с клиентом
 void SessionBase::Close() {
     beast::error_code ec;
     stream_.socket().shutdown(tcp::socket::shutdown_send, ec);
@@ -55,7 +78,6 @@ void SessionBase::Close() {
     }
 }
 
-// Логирует ошибки
 void SessionBase::ReportError(beast::error_code ec, std::string_view what) {
     std::cerr << what << ": " << ec.message() << std::endl;
 }
