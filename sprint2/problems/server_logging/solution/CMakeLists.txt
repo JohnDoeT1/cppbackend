@@ -30,3 +30,6 @@ target_link_libraries(game_server PRIVATE
     Boost::filesystem
     Boost::system
 )
+
+# Включаем header-only режим для Boost.JSON
+target_compile_definitions(game_server PRIVATE BOOST_JSON_HEADER_ONLY)
