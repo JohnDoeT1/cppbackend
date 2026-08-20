@@ -1,7 +1,7 @@
 #pragma once
 
 #include <filesystem>
-
+#include <string>
 #include "model.h"
 
 namespace json_loader {

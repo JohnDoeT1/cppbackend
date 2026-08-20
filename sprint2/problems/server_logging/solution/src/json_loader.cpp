@@ -1,60 +1,99 @@
 #include "json_loader.h"
 
-#include <boost/json.hpp>
 #include <fstream>
 #include <sstream>
 #include <stdexcept>
-
-namespace json = boost::json;
+#include <map>
+#include <vector>
+#include <regex>
 
 namespace json_loader {
 
-model::Road ParseRoad(const json::object& obj) {
+// Простой JSON парсер (только для нашей конфигурации)
+class SimpleJson {
+public:
+    static std::string GetString(const std::string& json, const std::string& key) {
+        std::regex pattern("\"" + key + "\"\\s*:\\s*\"([^\"]*)\"");
+        std::smatch match;
+        if (std::regex_search(json, match, pattern)) {
+            return match[1].str();
+        }
+        return "";
+    }
+    
+    static int GetInt(const std::string& json, const std::string& key) {
+        std::regex pattern("\"" + key + "\"\\s*:\\s*(\\d+)");
+        std::smatch match;
+        if (std::regex_search(json, match, pattern)) {
+            return std::stoi(match[1].str());
+        }
+        return 0;
+    }
+    
+    static std::vector<std::string> GetArray(const std::string& json, const std::string& key) {
+        std::vector<std::string> result;
+        std::regex pattern("\"" + key + "\"\\s*:\\s*\\[(.*?)\\]");
+        std::smatch match;
+        if (std::regex_search(json, match, pattern)) {
+            std::string array_content = match[1].str();
+            std::regex obj_pattern("\\{[^}]*\\}");
+            std::smatch obj_match;
+            std::string::const_iterator search_start = array_content.cbegin();
+            while (std::regex_search(search_start, array_content.cend(), obj_match, obj_pattern)) {
+                result.push_back(obj_match[0].str());
+                search_start = obj_match.suffix().first;
+            }
+        }
+        return result;
+    }
+};
+
+model::Road ParseRoad(const std::string& obj) {
     model::Point start{
-        static_cast<int>(obj.at("x0").as_int64()),
-        static_cast<int>(obj.at("y0").as_int64())
+        SimpleJson::GetInt(obj, "x0"),
+        SimpleJson::GetInt(obj, "y0")
     };
-    if (obj.contains("x1")) {
+    if (obj.find("\"x1\"") != std::string::npos) {
         return model::Road(model::Road::HORIZONTAL, start, 
-                          static_cast<int>(obj.at("x1").as_int64()));
+                          SimpleJson::GetInt(obj, "x1"));
     }
     return model::Road(model::Road::VERTICAL, start,
-                      static_cast<int>(obj.at("y1").as_int64()));
+                      SimpleJson::GetInt(obj, "y1"));
 }
 
-model::Building ParseBuilding(const json::object& obj) {
+model::Building ParseBuilding(const std::string& obj) {
     return model::Building(model::Rectangle{
-        {static_cast<int>(obj.at("x").as_int64()),
-         static_cast<int>(obj.at("y").as_int64())},
-        {static_cast<int>(obj.at("w").as_int64()),
-         static_cast<int>(obj.at("h").as_int64())}
+        {SimpleJson::GetInt(obj, "x"),
+         SimpleJson::GetInt(obj, "y")},
+        {SimpleJson::GetInt(obj, "w"),
+         SimpleJson::GetInt(obj, "h")}
     });
 }
 
-model::Office ParseOffice(const json::object& obj) {
+model::Office ParseOffice(const std::string& obj) {
     return model::Office(
-        model::Office::Id(json::value_to<std::string>(obj.at("id"))),
-        {static_cast<int>(obj.at("x").as_int64()),
-         static_cast<int>(obj.at("y").as_int64())},
-        {static_cast<int>(obj.at("offsetX").as_int64()),
-         static_cast<int>(obj.at("offsetY").as_int64())}
+        model::Office::Id(SimpleJson::GetString(obj, "id")),
+        {SimpleJson::GetInt(obj, "x"),
+         SimpleJson::GetInt(obj, "y")},
+        {SimpleJson::GetInt(obj, "offsetX"),
+         SimpleJson::GetInt(obj, "offsetY")}
     );
 }
 
-model::Map ParseMap(const json::object& obj) {
+model::Map ParseMap(const std::string& obj) {
     model::Map map(
-        model::Map::Id(json::value_to<std::string>(obj.at("id"))),
-        json::value_to<std::string>(obj.at("name"))
+        model::Map::Id(SimpleJson::GetString(obj, "id")),
+        SimpleJson::GetString(obj, "name")
     );
     
-    for (const auto& road : obj.at("roads").as_array()) {
-        map.AddRoad(ParseRoad(road.as_object()));
+    for (const auto& road : SimpleJson::GetArray(obj, "roads")) {
+        map.AddRoad(ParseRoad(road));
     }
-    for (const auto& building : obj.at("buildings").as_array()) {
-        map.AddBuilding(ParseBuilding(building.as_object()));
+    for (const auto& building : SimpleJson::GetArray(obj, "buildings")) {
+        map.AddBuilding(ParseBuilding(building));
     }
-    for (const auto& office : obj.at("offices").as_array()) {
-        map.AddOffice(ParseOffice(office.as_object()));
+    for (const auto& office : SimpleJson::GetArray(obj, "offices")) {
+        map.AddOffice(ParseOffice(office));
     }
     
     return map;
@@ -68,11 +107,11 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
     
     std::stringstream ss;
     ss << file.rdbuf();
-    auto value = json::parse(ss.str());
+    std::string content = ss.str();
     
     model::Game game;
-    for (const auto& map : value.at("maps").as_array()) {
-        game.AddMap(ParseMap(map.as_object()));
+    for (const auto& map : SimpleJson::GetArray(content, "maps")) {
+        game.AddMap(ParseMap(map));
     }
     
     return game;

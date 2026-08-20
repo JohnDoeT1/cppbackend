@@ -3,9 +3,8 @@
 #include "model.h"
 #include "static_content.h"
 
-#include <boost/json.hpp>
-
-namespace json = boost::json;
+#include <string>
+#include <sstream>
 
 namespace http_handler {
 namespace beast = boost::beast;
@@ -54,20 +53,25 @@ public:
         if (req.method() != http::verb::get) {
             auto res = http::response<http::string_body>(http::status::bad_request, 11);
             res.set(http::field::content_type, "application/json");
-            res.body() = MakeError("badRequest", "Bad request");
+            res.body() = "{\"code\":\"badRequest\",\"message\":\"Bad request\"}";
             res.content_length(res.body().size());
             send(std::move(res));
             return;
         }
         
         if (target == "/api/v1/maps") {
-            json::array arr;
+            std::string json = "[";
+            bool first = true;
             for (const auto& map : game_.GetMaps()) {
-                arr.push_back(MapToJson(map, false));
+                if (!first) json += ",";
+                json += "{\"id\":\"" + *map.GetId() + "\",\"name\":\"" + map.GetName() + "\"}";
+                first = false;
             }
+            json += "]";
+            
             auto res = http::response<http::string_body>(http::status::ok, 11);
             res.set(http::field::content_type, "application/json");
-            res.body() = json::serialize(arr);
+            res.body() = json;
             res.content_length(res.body().size());
             send(std::move(res));
             return;
@@ -77,15 +81,52 @@ public:
             auto id = target.substr(13);
             auto* map = game_.FindMap(model::Map::Id(id));
             if (map) {
+                std::string json = "{\"id\":\"" + *map->GetId() + "\",\"name\":\"" + map->GetName() + "\",\"roads\":[";
+                bool first = true;
+                for (const auto& r : map->GetRoads()) {
+                    if (!first) json += ",";
+                    json += "{\"x0\":" + std::to_string(r.GetStart().x) + 
+                            ",\"y0\":" + std::to_string(r.GetStart().y);
+                    if (r.IsHorizontal()) {
+                        json += ",\"x1\":" + std::to_string(r.GetEnd().x);
+                    } else {
+                        json += ",\"y1\":" + std::to_string(r.GetEnd().y);
+                    }
+                    json += "}";
+                    first = false;
+                }
+                json += "],\"buildings\":[";
+                first = true;
+                for (const auto& b : map->GetBuildings()) {
+                    if (!first) json += ",";
+                    json += "{\"x\":" + std::to_string(b.GetBounds().position.x) +
+                            ",\"y\":" + std::to_string(b.GetBounds().position.y) +
+                            ",\"w\":" + std::to_string(b.GetBounds().size.width) +
+                            ",\"h\":" + std::to_string(b.GetBounds().size.height) + "}";
+                    first = false;
+                }
+                json += "],\"offices\":[";
+                first = true;
+                for (const auto& o : map->GetOffices()) {
+                    if (!first) json += ",";
+                    json += "{\"id\":\"" + *o.GetId() + "\"" +
+                            ",\"x\":" + std::to_string(o.GetPosition().x) +
+                            ",\"y\":" + std::to_string(o.GetPosition().y) +
+                            ",\"offsetX\":" + std::to_string(o.GetOffset().dx) +
+                            ",\"offsetY\":" + std::to_string(o.GetOffset().dy) + "}";
+                    first = false;
+                }
+                json += "]}";
+                
                 auto res = http::response<http::string_body>(http::status::ok, 11);
                 res.set(http::field::content_type, "application/json");
-                res.body() = json::serialize(MapToJson(*map, true));
+                res.body() = json;
                 res.content_length(res.body().size());
                 send(std::move(res));
             } else {
                 auto res = http::response<http::string_body>(http::status::not_found, 11);
                 res.set(http::field::content_type, "application/json");
-                res.body() = MakeError("mapNotFound", "Map not found");
+                res.body() = "{\"code\":\"mapNotFound\",\"message\":\"Map not found\"}";
                 res.content_length(res.body().size());
                 send(std::move(res));
             }
@@ -94,70 +135,12 @@ public:
         
         auto res = http::response<http::string_body>(http::status::bad_request, 11);
         res.set(http::field::content_type, "application/json");
-        res.body() = MakeError("badRequest", "Bad request");
+        res.body() = "{\"code\":\"badRequest\",\"message\":\"Bad request\"}";
         res.content_length(res.body().size());
         send(std::move(res));
     }
 
 private:
-    std::string MakeError(const std::string& code, const std::string& message) {
-        json::object obj;
-        obj["code"] = code;
-        obj["message"] = message;
-        return json::serialize(obj);
-    }
-
-    json::value RoadToJson(const model::Road& road) {
-        json::object obj;
-        obj["x0"] = road.GetStart().x;
-        obj["y0"] = road.GetStart().y;
-        if (road.IsHorizontal()) {
-            obj["x1"] = road.GetEnd().x;
-        } else {
-            obj["y1"] = road.GetEnd().y;
-        }
-        return obj;
-    }
-
-    json::value MapToJson(const model::Map& map, bool full) {
-        json::object obj;
-        obj["id"] = *map.GetId();
-        obj["name"] = map.GetName();
-        
-        if (full) {
-            json::array roads;
-            for (const auto& r : map.GetRoads()) {
-                roads.push_back(RoadToJson(r));
-            }
-            obj["roads"] = roads;
-            
-            json::array buildings;
-            for (const auto& b : map.GetBuildings()) {
-                json::object bo;
-                bo["x"] = b.GetBounds().position.x;
-                bo["y"] = b.GetBounds().position.y;
-                bo["w"] = b.GetBounds().size.width;
-                bo["h"] = b.GetBounds().size.height;
-                buildings.push_back(bo);
-            }
-            obj["buildings"] = buildings;
-            
-            json::array offices;
-            for (const auto& o : map.GetOffices()) {
-                json::object oo;
-                oo["id"] = *o.GetId();
-                oo["x"] = o.GetPosition().x;
-                oo["y"] = o.GetPosition().y;
-                oo["offsetX"] = o.GetOffset().dx;
-                oo["offsetY"] = o.GetOffset().dy;
-                offices.push_back(oo);
-            }
-            obj["offices"] = offices;
-        }
-        
-        return obj;
-    }
-
     model::Game& game_;
     StaticContentHandler static_handler_;
 };
