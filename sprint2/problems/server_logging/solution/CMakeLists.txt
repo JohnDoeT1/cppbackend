@@ -2,7 +2,6 @@ cmake_minimum_required(VERSION 3.15)
 project(GameServer CXX)
 set(CMAKE_CXX_STANDARD 20)
 
-# Находим Boost компоненты (без json, так как мы установили его вручную)
 find_package(Boost REQUIRED COMPONENTS 
     log 
     log_setup 
@@ -11,6 +10,13 @@ find_package(Boost REQUIRED COMPONENTS
     filesystem 
     system
 )
+
+# Собираем Boost.JSON из исходников
+add_library(boost_json STATIC
+    /usr/local/src/json-boost-1.78.0/src/src.cpp
+)
+target_include_directories(boost_json PUBLIC /usr/local/src/json-boost-1.78.0/include)
+set_target_properties(boost_json PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 add_executable(game_server 
     src/main.cpp
@@ -29,7 +35,5 @@ target_link_libraries(game_server PRIVATE
     Boost::thread
     Boost::filesystem
     Boost::system
+    boost_json
 )
-
-# Включаем header-only режим для Boost.JSON
-target_compile_definitions(game_server PRIVATE BOOST_JSON_HEADER_ONLY)
