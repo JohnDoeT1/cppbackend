@@ -9,6 +9,7 @@
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
 
+#include <iostream>
 #include <memory>
 #include <utility>
 #include <string_view>
@@ -116,19 +117,19 @@ public:
         boost::system::error_code ec;
         acceptor_.open(endpoint.protocol(), ec);
         if (ec) {
-            throw std::runtime_error("Failed to open acceptor: " + ec.message());
+            throw std::runtime_error("open: " + ec.message());
         }
         acceptor_.set_option(net::socket_base::reuse_address(true), ec);
         if (ec) {
-            throw std::runtime_error("Failed to set reuse_address: " + ec.message());
+            throw std::runtime_error("reuse_address: " + ec.message());
         }
         acceptor_.bind(endpoint, ec);
         if (ec) {
-            throw std::runtime_error("Failed to bind to " + endpoint.address().to_string() + ":" + std::to_string(endpoint.port()) + ": " + ec.message());
+            throw std::runtime_error("bind: " + ec.message());
         }
         acceptor_.listen(net::socket_base::max_listen_connections, ec);
         if (ec) {
-            throw std::runtime_error("Failed to listen: " + ec.message());
+            throw std::runtime_error("listen: " + ec.message());
         }
     }
 
@@ -143,9 +144,7 @@ private:
         acceptor_.async_accept(
             [self = this->shared_from_this()](beast::error_code ec, tcp::socket socket) {
                 if (ec) {
-                    if (ec != net::error::operation_aborted) {
-                        std::cerr << "Accept error: " << ec.message() << std::endl;
-                    }
+                    // При ошибке просто выходим, не пытаемся продолжать
                     return;
                 }
                 self->AsyncRunSession(std::move(socket));

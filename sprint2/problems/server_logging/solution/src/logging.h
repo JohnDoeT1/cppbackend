@@ -48,7 +48,7 @@ inline void InitLogging() {
     logging::add_common_attributes();
     
     logging::add_console_log(
-        std::clog,
+        std::clog,                      // <-- вывод в stderr-поток
         keywords::format = &JsonFormatter,
         keywords::auto_flush = true
     );

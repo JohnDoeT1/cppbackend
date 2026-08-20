@@ -20,6 +20,10 @@ WORKDIR /workspace
 
 COPY . .
 
+# Создаём минимальный конфиг и статическую папку, если их нет
+RUN mkdir -p /workspace/data /workspace/static \
+    && echo '{"maps": []}' > /workspace/data/config.json
+
 RUN mkdir -p build && cd build && \
     cmake .. -DCMAKE_BUILD_TYPE=Release && \
     cmake --build .

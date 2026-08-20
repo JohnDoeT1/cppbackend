@@ -7,7 +7,7 @@ namespace http_server {
 
 // Запускает сессию: инициирует первое чтение запроса
 void SessionBase::Run() {
-    // Запускаем чтение напрямую, без dispatch
+    // Вызываем чтение напрямую, без dispatch
     Read();
 }
 
