@@ -13,7 +13,6 @@ find_package(Boost REQUIRED COMPONENTS
 
 add_executable(game_server 
     src/main.cpp
-    src/boost_json.cpp
     src/http_server.cpp
     src/json_loader.cpp
     src/model.cpp
