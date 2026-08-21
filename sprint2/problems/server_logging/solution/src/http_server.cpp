@@ -1,17 +1,32 @@
 #include "http_server.h"
 
 #include <boost/asio/dispatch.hpp>
-#include <iostream>
+#include <boost/log/utility/manipulators/add_value.hpp>
+#include <boost/log/sources/record_ostream.hpp>
 
 namespace http_server {
 
+void ReportError(beast::error_code ec, std::string_view what) {
+    json::value custom_data{
+        {"code", ec.value()},
+        {"text", ec.message()},
+        {"where", std::string(what)}
+    };
+    
+    BOOST_LOG_SEV(lg, boost::log::trivial::error) 
+        << boost::log::add_value("AdditionalData", custom_data)
+        << "error";
+}
+
 void SessionBase::Run() {
-    Read();
+    net::dispatch(
+        stream_.get_executor(),
+        beast::bind_front_handler(&SessionBase::Read, GetSharedThis())
+    );
 }
 
 void SessionBase::Read() {
     request_ = {};
-    buffer_.consume(buffer_.size());  // очищаем буфер перед чтением
     stream_.expires_after(std::chrono::seconds(30));
 
     http::async_read(
@@ -29,8 +44,6 @@ void SessionBase::OnRead(beast::error_code ec, std::size_t) {
     if (ec) {
         return ReportError(ec, "read");
     }
-
-    // Обрабатываем запрос. Если обработчик бросит исключение, закроем соединение.
     HandleRequest(std::move(request_));
 }
 
@@ -53,7 +66,7 @@ void SessionBase::Close() {
 }
 
 void SessionBase::ReportError(beast::error_code ec, std::string_view what) {
-    std::cerr << what << ": " << ec.message() << std::endl;
+    http_server::ReportError(ec, what);
 }
 
 } // namespace http_server

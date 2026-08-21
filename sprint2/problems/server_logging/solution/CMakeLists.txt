@@ -1,39 +1,37 @@
 cmake_minimum_required(VERSION 3.15)
-project(GameServer CXX)
+project(game_server CXX)
+
+# Настройка C++ стандарта
 set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Boost REQUIRED COMPONENTS 
-    log 
-    log_setup 
-    date_time 
-    thread 
-    filesystem 
-    system
-)
+# Поиск Boost через Conan
+find_package(Boost REQUIRED COMPONENTS log log_setup json)
 
-# Собираем Boost.JSON из исходников
-add_library(boost_json STATIC
-    /usr/local/src/json-boost-1.78.0/src/src.cpp
-)
-target_include_directories(boost_json PUBLIC /usr/local/src/json-boost-1.78.0/include)
-set_target_properties(boost_json PROPERTIES POSITION_INDEPENDENT_CODE ON)
-
-add_executable(game_server 
+# Добавляем исполняемый файл
+add_executable(game_server
     src/main.cpp
+    src/boost_json.cpp
     src/http_server.cpp
     src/json_loader.cpp
     src/model.cpp
     src/request_handler.cpp
+    src/logging_request_handler.cpp
 )
 
-target_include_directories(game_server PRIVATE src)
+# Подключаем заголовочные файлы
+target_include_directories(game_server PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
 
-target_link_libraries(game_server PRIVATE 
+# Линкуем библиотеки Boost
+target_link_libraries(game_server
+    Boost::boost
     Boost::log
     Boost::log_setup
-    Boost::date_time
-    Boost::thread
-    Boost::filesystem
-    Boost::system
-    boost_json
+    Boost::json
 )
+
+# Добавляем поддержку потоков
+find_package(Threads REQUIRED)
+target_link_libraries(game_server Threads::Threads)

@@ -1,29 +1,37 @@
 FROM ubuntu:22.04
 
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    cmake \
-    git \
-    libboost-all-dev \
+# Установка необходимых пакетов
+RUN apt-get update && \
+    apt-get install -y \
+    python3 \
     python3-pip \
-    wget \
+    cmake \
+    g++ \
+    make \
     && rm -rf /var/lib/apt/lists/*
 
-RUN cd /tmp \
-    && wget https://github.com/boostorg/json/archive/refs/tags/boost-1.78.0.tar.gz \
-    && tar -xzf boost-1.78.0.tar.gz \
-    && mv json-boost-1.78.0 /usr/local/src/ \
-    && rm -rf boost-1.78.0.tar.gz
+# Установка Conan 2.x
+RUN pip3 install conan
 
-WORKDIR /workspace
+# Установка профиля Conan
+RUN conan profile detect --force
 
+# Создание рабочей директории
+WORKDIR /app
+
+# Копирование исходников (build исключен через .dockerignore)
 COPY . .
 
-RUN mkdir -p /workspace/data /workspace/static \
-    && echo '{"maps": []}' > /workspace/data/config.json
-
-RUN mkdir -p build && cd build && \
-    cmake .. -DCMAKE_BUILD_TYPE=Release && \
+# Сборка проекта
+RUN rm -rf build && \
+    mkdir -p build && \
+    cd build && \
+    conan install .. --build=missing -s build_type=Release && \
+    cmake .. -DCMAKE_TOOLCHAIN_FILE=conan_toolchain.cmake -DCMAKE_BUILD_TYPE=Release && \
     cmake --build .
 
-CMD ["./build/game_server", "data/config.json", "static"]
+# Порт для HTTP-сервера
+EXPOSE 8080
+
+# Запуск сервера
+CMD ["./build/game_server", "./data/config.json", "./static"]

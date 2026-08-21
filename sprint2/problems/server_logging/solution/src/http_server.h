@@ -8,8 +8,10 @@
 #include <boost/asio/strand.hpp>
 #include <boost/beast/core.hpp>
 #include <boost/beast/http.hpp>
+#include <boost/log/trivial.hpp>
+#include <boost/log/sources/severity_logger.hpp>
+#include <boost/json.hpp>
 
-#include <iostream>
 #include <memory>
 #include <utility>
 #include <string_view>
@@ -21,6 +23,12 @@ using tcp = net::ip::tcp;
 
 namespace beast = boost::beast;
 namespace http = beast::http;
+namespace json = boost::json;
+
+// Глобальный логгер
+inline boost::log::sources::severity_logger<boost::log::trivial::severity_level> lg;
+
+void ReportError(beast::error_code ec, std::string_view what);
 
 class SessionBase {
 public:
@@ -96,23 +104,10 @@ class Listener : public std::enable_shared_from_this<Listener<RequestHandler>> {
 public:
     Listener(net::io_context& ioc, tcp::endpoint endpoint, RequestHandler handler)
         : acceptor_(ioc), request_handler_(std::move(handler)) {
-        boost::system::error_code ec;
-        acceptor_.open(endpoint.protocol(), ec);
-        if (ec) {
-            throw std::runtime_error("open: " + ec.message());
-        }
-        acceptor_.set_option(net::socket_base::reuse_address(true), ec);
-        if (ec) {
-            throw std::runtime_error("reuse_address: " + ec.message());
-        }
-        acceptor_.bind(endpoint, ec);
-        if (ec) {
-            throw std::runtime_error("bind: " + ec.message());
-        }
-        acceptor_.listen(net::socket_base::max_listen_connections, ec);
-        if (ec) {
-            throw std::runtime_error("listen: " + ec.message());
-        }
+        acceptor_.open(endpoint.protocol());
+        acceptor_.set_option(net::socket_base::reuse_address(true));
+        acceptor_.bind(endpoint);
+        acceptor_.listen();
     }
 
     void Run() {
@@ -124,9 +119,10 @@ private:
         acceptor_.async_accept(
             [self = this->shared_from_this()](beast::error_code ec, tcp::socket socket) {
                 if (ec) {
-                    return;
+                    ReportError(ec, "accept");
+                } else {
+                    self->AsyncRunSession(std::move(socket));
                 }
-                self->AsyncRunSession(std::move(socket));
                 self->DoAccept();
             }
         );
