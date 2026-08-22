@@ -1,0 +1,31 @@
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+*.exe
+
+# CMake generated files
+CMakeCache.txt
+CMakeFiles/
+CMakeUserPresets.json
+CMakePresets.json
+cmake_install.cmake
+Makefile
+*.cmake
+
+# Conan generated files
+conan_toolchain.cmake
+conanbuildinfo.cmake
+conaninfo.txt
+conanbuildinfo.txt
+conanbuild.sh
+conanrun.sh
+conanbuildenv.sh
+conanrunenv.sh
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
