@@ -11,22 +11,22 @@ namespace json_loader {
 
 namespace {
 // Ключи для доступа к полям JSON
-constexpr std::string_view KEY_X = "x";
-constexpr std::string_view KEY_Y = "y";
-constexpr std::string_view KEY_W = "w";
-constexpr std::string_view KEY_H = "h";
-constexpr std::string_view KEY_X0 = "x0";
-constexpr std::string_view KEY_Y0 = "y0";
-constexpr std::string_view KEY_X1 = "x1";
-constexpr std::string_view KEY_Y1 = "y1";
-constexpr std::string_view KEY_ID = "id";
-constexpr std::string_view KEY_NAME = "name";
-constexpr std::string_view KEY_OFFSET_X = "offsetX";
-constexpr std::string_view KEY_OFFSET_Y = "offsetY";
-constexpr std::string_view KEY_ROADS = "roads";
-constexpr std::string_view KEY_BUILDINGS = "buildings";
-constexpr std::string_view KEY_OFFICES = "offices";
-constexpr std::string_view KEY_MAPS = "maps";
+const std::string KEY_X = "x";
+const std::string KEY_Y = "y";
+const std::string KEY_W = "w";
+const std::string KEY_H = "h";
+const std::string KEY_X0 = "x0";
+const std::string KEY_Y0 = "y0";
+const std::string KEY_X1 = "x1";
+const std::string KEY_Y1 = "y1";
+const std::string KEY_ID = "id";
+const std::string KEY_NAME = "name";
+const std::string KEY_OFFSET_X = "offsetX";
+const std::string KEY_OFFSET_Y = "offsetY";
+const std::string KEY_ROADS = "roads";
+const std::string KEY_BUILDINGS = "buildings";
+const std::string KEY_OFFICES = "offices";
+const std::string KEY_MAPS = "maps";
 } // namespace
 
 model::Road ParseRoad(const json::object& obj) {
