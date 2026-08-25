@@ -74,7 +74,13 @@ model::Game LoadGame(const std::filesystem::path& json_path) {
     
     std::stringstream ss;
     ss << file.rdbuf();
-    auto value = json::parse(ss.str());
+    
+    json::value value;
+    try {
+        value = json::parse(ss.str());
+    } catch (const std::exception& e) {
+        throw std::runtime_error("Failed to parse config file: " + std::string(e.what()));
+    }
     
     double default_dog_speed = 1.0;
     if (value.as_object().contains("defaultDogSpeed")) {

@@ -8,12 +8,9 @@ find_package(Boost REQUIRED COMPONENTS log log_setup json program_options)
 
 add_executable(game_server
     src/main.cpp
-    src/boost_json.cpp
     src/http_server.cpp
     src/json_loader.cpp
     src/model.cpp
-    src/request_handler.cpp
-    src/logging_request_handler.cpp
     src/ticker.cpp
 )
 

@@ -15,10 +15,19 @@ namespace http_handler {
 namespace beast = boost::beast;
 namespace http = beast::http;
 
+namespace {
+constexpr std::string_view API_JOIN = "/api/v1/game/join";
+constexpr std::string_view API_PLAYERS = "/api/v1/game/players";
+constexpr std::string_view API_STATE = "/api/v1/game/state";
+constexpr std::string_view API_ACTION = "/api/v1/game/player/action";
+constexpr std::string_view API_TICK = "/api/v1/game/tick";
+constexpr std::string_view API_MAPS = "/api/v1/maps";
+}
+
 class RequestHandler {
 public:
     explicit RequestHandler(model::Game& game, const std::string& static_path, bool allow_tick = true)
-        : game_{game}, static_handler_(static_path), allow_tick_(allow_tick) {
+        : game_{game}, static_handler_(static_path), allow_tick_(allow_tick), gen_(random_device_()) {
     }
 
     RequestHandler(const RequestHandler&) = delete;
@@ -44,14 +53,13 @@ public:
                 
                 send(std::move(res));
                 return;
-            } else {
-                auto res = http::response<http::string_body>(http::status::method_not_allowed, 11);
-                res.set(http::field::content_type, "text/plain");
-                res.body() = "Method Not Allowed";
-                res.content_length(res.body().size());
-                send(std::move(res));
-                return;
             }
+            auto res = http::response<http::string_body>(http::status::method_not_allowed, 11);
+            res.set(http::field::content_type, "text/plain");
+            res.body() = "Method Not Allowed";
+            res.content_length(res.body().size());
+            send(std::move(res));
+            return;
         }
         
         // Обработка API запросов - важно проверять точные пути первыми
@@ -509,14 +517,11 @@ private:
     }
     
     std::string GenerateToken() {
-        std::random_device rd;
-        std::mt19937 gen(rd());
         std::uniform_int_distribution<> dis(0, 15);
-        
         std::stringstream ss;
         ss << std::hex;
         for (int i = 0; i < 32; ++i) {
-            ss << dis(gen);
+            ss << dis(gen_);
         }
         return ss.str();
     }
@@ -582,6 +587,8 @@ private:
     model::Game& game_;
     StaticContentHandler static_handler_;
     bool allow_tick_;
+    std::random_device random_device_;
+    std::mt19937 gen_{random_device_()};
 };
 
 }  // namespace http_handler

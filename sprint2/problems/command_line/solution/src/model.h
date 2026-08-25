@@ -284,10 +284,9 @@ public:
         if (road.IsHorizontal()) {
             std::uniform_real_distribution<> dist(road.GetStart().x, road.GetEnd().x);
             return Position{dist(gen), static_cast<double>(road.GetStart().y)};
-        } else {
-            std::uniform_real_distribution<> dist(road.GetStart().y, road.GetEnd().y);
-            return Position{static_cast<double>(road.GetStart().x), dist(gen)};
         }
+        std::uniform_real_distribution<> dist(road.GetStart().y, road.GetEnd().y);
+        return Position{static_cast<double>(road.GetStart().x), dist(gen)};
     }
     
     // Проверить, находится ли позиция в пределах дороги
@@ -369,10 +368,8 @@ public:
     }
 
     const Map* FindMap(const Map::Id& id) const noexcept {
-        if (auto it = map_id_to_index_.find(id); it != map_id_to_index_.end()) {
-            return &maps_.at(it->second);
-        }
-        return nullptr;
+        auto it = map_id_to_index_.find(id);
+        return it != map_id_to_index_.end() ? &maps_.at(it->second) : nullptr;
     }
     
     uint32_t AddPlayer(const std::string& name, const Map::Id& map_id) {
