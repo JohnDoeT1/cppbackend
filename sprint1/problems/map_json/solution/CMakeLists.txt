@@ -5,8 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
-include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-conan_basic_setup()
+# Для Conan 2.X
+find_package(Boost REQUIRED COMPONENTS json)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -28,5 +28,5 @@ add_executable(game_server
 
 target_link_libraries(game_server PRIVATE 
     Threads::Threads
-    ${CONAN_LIBS}
+    Boost::boost
 )
