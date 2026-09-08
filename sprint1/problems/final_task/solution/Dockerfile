@@ -1,6 +1,7 @@
 FROM gcc:11.3 as build
 
-RUN apt update --allow-releaseinfo-change && \
+RUN sed -i 's/^deb.*bullseye-security/#&/' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null; \
+    apt update && \
     apt install -y \
       python3-pip \
       cmake \
