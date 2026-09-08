@@ -5,6 +5,11 @@ set(CMAKE_CXX_STANDARD 20)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
+# Автоматически подключаем toolchain, если он есть
+if(EXISTS "${CMAKE_BINARY_DIR}/conan_toolchain.cmake")
+    include("${CMAKE_BINARY_DIR}/conan_toolchain.cmake")
+endif()
+
 find_package(Boost REQUIRED COMPONENTS json)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
