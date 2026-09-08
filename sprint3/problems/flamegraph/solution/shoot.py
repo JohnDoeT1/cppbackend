@@ -62,8 +62,8 @@ server = run(server_command)
 # Даем серверу время на запуск
 time.sleep(2)
 
-# Запускаем perf record для трассировки сервера
-perf_record = run('perf record -o perf.data -g -p ' + str(server.pid))
+# Запускаем perf record с call graph
+perf_record = run('perf record -o perf.data --call-graph dwarf -p ' + str(server.pid))
 
 # Выполняем обстрелы запросами
 make_shots()

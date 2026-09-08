@@ -1,6 +1,6 @@
 FROM gcc:11.3 as build
 
-RUN apt update && \
+RUN apt update --allow-releaseinfo-change && \
     apt install -y \
       python3-pip \
       cmake \
