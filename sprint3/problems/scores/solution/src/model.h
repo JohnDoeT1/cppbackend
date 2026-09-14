@@ -219,12 +219,24 @@ public:
         std::uniform_int_distribution<> road_dist(0, static_cast<int>(roads_.size()) - 1);
         const Road& road = roads_[road_dist(gen)];
 
+        const Point start = road.GetStart();
+        const Point end = road.GetEnd();
+
         if (road.IsHorizontal()) {
-            std::uniform_real_distribution<> dist(road.GetStart().x, road.GetEnd().x);
-            return Position{dist(gen), static_cast<double>(road.GetStart().y)};
+            const double min_x = std::min(static_cast<double>(start.x),
+                                          static_cast<double>(end.x));
+            const double max_x = std::max(static_cast<double>(start.x),
+                                          static_cast<double>(end.x));
+            std::uniform_real_distribution<> dist(min_x, max_x);
+            return Position{dist(gen), static_cast<double>(start.y)};
         }
-        std::uniform_real_distribution<> dist(road.GetStart().y, road.GetEnd().y);
-        return Position{static_cast<double>(road.GetStart().x), dist(gen)};
+
+        const double min_y = std::min(static_cast<double>(start.y),
+                                      static_cast<double>(end.y));
+        const double max_y = std::max(static_cast<double>(start.y),
+                                      static_cast<double>(end.y));
+        std::uniform_real_distribution<> dist(min_y, max_y);
+        return Position{static_cast<double>(start.x), dist(gen)};
     }
 
     bool IsPositionOnRoad(const Position& pos) const {
