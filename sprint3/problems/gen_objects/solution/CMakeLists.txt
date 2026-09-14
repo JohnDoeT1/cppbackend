@@ -14,7 +14,9 @@ add_library(game_model STATIC
     src/model.cpp
     src/loot_generator.cpp
     src/json_loader.cpp
+    src/collision_detector.cpp   # <-- для отладки
 )
+
 
 # Публичный интерфейс: заголовки + зависимости,
 # нужные для компиляции потребителей.

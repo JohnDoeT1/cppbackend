@@ -210,6 +210,8 @@ public:
                         static_cast<double>(road.GetStart().y)};
     }
 
+    // ИСПРАВЛЕНО: нормализуем границы через std::min/std::max,
+    // чтобы uniform_real_distribution всегда получал a <= b.
     Position GetRandomPositionOnRoad() const {
         if (roads_.empty()) return Position{0.0, 0.0};
 
@@ -440,7 +442,7 @@ public:
             start_positions[id] = player.GetDog()->GetPosition();
         }
 
-        // --- 2. Движение собак (без изменений) ---
+        // --- 2. Движение собак ---
         for (auto& [player_id, player] : players_) {
             auto& dog = player.GetDog();
             const Speed speed = dog->GetSpeed();
@@ -530,26 +532,29 @@ public:
         // --- 3. Сбор и сдача ---
         HandleGatherAndReturn(start_positions);
 
-        // --- 4. Генерация новых потеряшек (с value) ---
-        if (!loot_gen_) return;
+        // --- 4. Генерация новых потеряшек ---
+        if (!loot_gen_ || players_.empty()) return;
+
+        // ИСПРАВЛЕНО: генерируем на карте игрока, а не на maps_.front()
+        const auto map_id = GetPlayerMap(players_.begin()->first);
+        const Map* map = FindMap(map_id);
+        if (!map) return;
 
         const auto time_delta = std::chrono::milliseconds(time_delta_ms);
         const unsigned looters = static_cast<unsigned>(players_.size());
         const unsigned loot = static_cast<unsigned>(lost_objects_.Size());
         const unsigned to_generate = loot_gen_->Generate(time_delta, loot, looters);
 
-        if (to_generate == 0 || maps_.empty()) return;
+        if (to_generate == 0) return;
 
-        const Map& map = maps_.front();
         for (unsigned i = 0; i < to_generate; ++i) {
             LootType type = 0;
-            if (map.GetLootTypesCount() > 0) {
+            if (map->GetLootTypesCount() > 0) {
                 std::uniform_int_distribution<std::uint32_t> type_dist{
-                    0, map.GetLootTypesCount() - 1};
+                    0, map->GetLootTypesCount() - 1};
                 type = type_dist(gen_);
             }
-            // ИСПРАВЛЕНО: передаём value по типу трофея
-            lost_objects_.Add(type, map.GetLootValue(type), map.GetRandomPositionOnRoad());
+            lost_objects_.Add(type, map->GetLootValue(type), map->GetRandomPositionOnRoad());
         }
     }
 
@@ -575,26 +580,28 @@ private:
         std::vector<collision_detector::Gatherer> gatherers_;
     };
 
-    // Раздельные события: сбор предмета и сдача на базу
     struct TickEvent {
         enum class Type { Collect, Return };
         double time;
         Type type;
         uint32_t player_id;
-        LostObjectId item_id = 0;  // используется только для Collect
+        LostObjectId item_id = 0;
     };
 
     void HandleGatherAndReturn(
         const std::unordered_map<uint32_t, Position>& start_positions) {
 
-        if (maps_.empty() || players_.empty()) return;
+        if (players_.empty()) return;
 
-        const Map& map = maps_.front();
+        // ИСПРАВЛЕНО: карта игрока, а не maps_.front()
+        const auto map_id = GetPlayerMap(players_.begin()->first);
+        const Map* map_ptr = FindMap(map_id);
+        if (!map_ptr) return;
 
-        // Строим провайдера: gatherers — только игроки, items — потеряшки.
+        const Map& map = *map_ptr;
+
         Provider provider;
 
-        // Items: потеряшки (полу-ширина = 0.0)
         std::vector<LostObjectId> item_ids;
         item_ids.reserve(lost_objects_.Size());
         for (const auto& [id, obj] : lost_objects_.Get()) {
@@ -605,7 +612,6 @@ private:
             item_ids.push_back(id);
         }
 
-        // Gatherers: игроки (полу-ширина = 0.3)
         std::vector<uint32_t> player_ids;
         player_ids.reserve(players_.size());
         for (const auto& [id, player] : players_) {
@@ -621,7 +627,6 @@ private:
 
         std::vector<TickEvent> events;
 
-        // События сбора
         if (!player_ids.empty() && !item_ids.empty()) {
             auto collects = collision_detector::FindGatherEvents(provider);
             for (const auto& ev : collects) {
@@ -634,8 +639,6 @@ private:
             }
         }
 
-        // События сдачи: игрок дошёл до базы
-        // Полу-ширина базы 0.25, полу-ширина игрока 0.3 → радиус 0.55
         for (const auto& office : map.GetOffices()) {
             const geom::Point2D office_pos{
                 static_cast<double>(office.GetPosition().x),
@@ -648,7 +651,7 @@ private:
                 const geom::Point2D b{e.x, e.y};
 
                 if (std::abs(b.x - a.x) < 1e-12 && std::abs(b.y - a.y) < 1e-12) {
-                    continue;  // игрок не двигался
+                    continue;
                 }
 
                 auto res = collision_detector::TryCollectPoint(a, b, office_pos);
@@ -664,13 +667,11 @@ private:
             }
         }
 
-        // Сортируем все события по времени
         std::sort(events.begin(), events.end(),
                   [](const TickEvent& a, const TickEvent& b) {
                       return a.time < b.time;
                   });
 
-        // Обрабатываем
         for (const auto& ev : events) {
             auto pit = players_.find(ev.player_id);
             if (pit == players_.end()) continue;
@@ -679,11 +680,10 @@ private:
             if (ev.type == TickEvent::Type::Collect) {
                 if (player.IsBagFull()) continue;
                 const LostObject* obj = lost_objects_.Find(ev.item_id);
-                if (!obj) continue;  // уже кто-то взял
+                if (!obj) continue;
                 player.PutInBag(*obj);
                 lost_objects_.Remove(ev.item_id);
-            } else {  // Return
-                // ИСПРАВЛЕНО: начисляем очки за каждый предмет в рюкзаке
+            } else {
                 for (const auto& item : player.GetBag()) {
                     player.AddScore(item.value);
                 }
