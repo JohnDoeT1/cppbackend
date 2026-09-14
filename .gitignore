@@ -788,3 +788,9 @@ sprint2/problems/static_content/solution/conanrunenv-*.sh
 sprint2/problems/static_content/solution/deactivate_conan*
 sprint2/problems/static_content/solution/conandeps_legacy.cmake
 sprint2/problems/static_content/solution/CMakePresets.json
+build/
+build_wrong/
+_deps/
+*.xml
+__pycache__/
+*.pyc
