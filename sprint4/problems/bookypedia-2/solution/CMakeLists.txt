@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 
+# --- Conan 1: подключаем toolchain и ищем CONFIG-пакеты в build/ ---
 if(NOT CMAKE_TOOLCHAIN_FILE)
     if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/build/conan_toolchain.cmake")
         set(CMAKE_TOOLCHAIN_FILE "${CMAKE_CURRENT_SOURCE_DIR}/build/conan_toolchain.cmake"
@@ -10,13 +11,17 @@ if(NOT CMAKE_TOOLCHAIN_FILE)
     endif()
 endif()
 
+# Чтобы find_package(CONFIG) нашёл сгенерированные Conan конфиги в build/
+list(APPEND CMAKE_PREFIX_PATH ${CMAKE_BINARY_DIR})
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_BINARY_DIR})
+
 project(bookypedia CXX)
 set(CMAKE_CXX_STANDARD 20)
 
-find_package(Boost REQUIRED)
-find_package(libpqxx REQUIRED)
-find_package(Catch2 REQUIRED)
-find_package(GTest REQUIRED)
+find_package(Boost CONFIG REQUIRED)
+find_package(libpqxx CONFIG REQUIRED)
+find_package(Catch2 CONFIG REQUIRED)
+find_package(GTest CONFIG REQUIRED)
 
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
@@ -53,6 +58,3 @@ add_executable(bookypedia
 	src/main.cpp
 )
 target_link_libraries(bookypedia PRIVATE Boost::boost libbookypedia)
-
-# tests — оставьте если хотите их собирать, но они из bookypedia-1, могут не собираться с новым API
-# add_executable(tests ...)
