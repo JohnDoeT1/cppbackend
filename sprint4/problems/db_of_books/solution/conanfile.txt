@@ -1,0 +1,7 @@
+[requires]
+libpqxx/7.8.1
+nlohmann_json/3.11.3
+
+[generators]
+CMakeDeps
+CMakeToolchain
