@@ -3,13 +3,19 @@
 #include "model.h"
 #include "static_content.h"
 #include "extra_data.h"
-#include "retired_players_repository.h"   // <-- ДОБАВЛЕНО
+#include "retired_players_repository.h"
+#include "json_response.h"
 
 #include <boost/json.hpp>
 #include <sstream>
 #include <iomanip>
 #include <random>
 #include <cctype>
+#include <string>
+#include <string_view>
+#include <unordered_map>
+#include <optional>
+#include <vector>
 
 namespace json = boost::json;
 
@@ -18,25 +24,40 @@ namespace beast = boost::beast;
 namespace http = beast::http;
 
 namespace {
+
+// Эндпоинты API
 constexpr std::string_view API_JOIN = "/api/v1/game/join";
 constexpr std::string_view API_PLAYERS = "/api/v1/game/players";
 constexpr std::string_view API_STATE = "/api/v1/game/state";
 constexpr std::string_view API_ACTION = "/api/v1/game/player/action";
 constexpr std::string_view API_TICK = "/api/v1/game/tick";
 constexpr std::string_view API_MAPS = "/api/v1/maps";
-constexpr std::string_view API_RECORDS = "/api/v1/game/records";   // <-- ДОБАВЛЕНО
-}
+constexpr std::string_view API_RECORDS = "/api/v1/game/records";
+constexpr std::string_view API_MAPS_PREFIX = "/api/v1/maps/";
+
+// Ограничения
+constexpr int kDefaultMaxItems = 100;
+constexpr int kMaxItemsLimit = 100;
+
+// Токен
+constexpr std::string_view kBearerPrefix = "Bearer ";
+constexpr std::size_t kTokenLength = 32;
+
+// Смещение в /api/v1/maps/<id>
+constexpr std::size_t kMapsPrefixLength = API_MAPS_PREFIX.size();
+
+}  // namespace
 
 class RequestHandler {
 public:
     explicit RequestHandler(model::Game& game,
                             extra_data::LootTypes& loot_types,
-                            infrastructure::RetiredPlayersRepository& records_repo,   // <-- ДОБАВЛЕНО
+                            infrastructure::RetiredPlayersRepository& records_repo,
                             const std::string& static_path,
                             bool allow_tick = true)
         : game_{game}
         , loot_types_{loot_types}
-        , records_repo_{records_repo}                       // <-- ДОБАВЛЕНО
+        , records_repo_{records_repo}
         , static_handler_(static_path)
         , allow_tick_(allow_tick)
         , gen_(random_device_()) {
@@ -48,21 +69,21 @@ public:
     template <typename Body, typename Allocator, typename Send>
     void operator()(http::request<Body, http::basic_fields<Allocator>>&& req, Send&& send) {
         auto target = std::string(req.target());
-        
+
         // Обработка статических файлов
         if (!target.starts_with("/api/")) {
             if (req.method() == http::verb::get || req.method() == http::verb::head) {
                 auto static_response = static_handler_.handle_request(target);
-                
+
                 auto res = http::response<http::string_body>(
                     static_cast<http::status>(static_response.status_code), 11);
                 res.set(http::field::content_type, static_response.content_type);
                 res.set(http::field::content_length, std::to_string(static_response.content_length));
-                
+
                 if (req.method() == http::verb::get) {
                     res.body() = static_response.body;
                 }
-                
+
                 send(std::move(res));
                 return;
             }
@@ -73,51 +94,52 @@ public:
             send(std::move(res));
             return;
         }
-        
-        // Обработка API запросов - важно проверять точные пути первыми
-        if (target == "/api/v1/game/join") {
+
+        // Обработка API запросов — важно проверять точные пути первыми
+        if (target == API_JOIN) {
             HandleJoinGame(std::move(req), std::forward<Send>(send));
             return;
         }
-        
-        if (target == "/api/v1/game/players") {
+
+        if (target == API_PLAYERS) {
             HandleGetPlayers(std::move(req), std::forward<Send>(send));
             return;
         }
-        
-        if (target == "/api/v1/game/state") {
+
+        if (target == API_STATE) {
             HandleGetState(std::move(req), std::forward<Send>(send));
             return;
         }
-        
-        if (target == "/api/v1/game/player/action") {
+
+        if (target == API_ACTION) {
             HandlePlayerAction(std::move(req), std::forward<Send>(send));
             return;
         }
-        
-        if (target == "/api/v1/game/tick") {
+
+        if (target == API_TICK) {
             if (!allow_tick_) {
-                SendError(http::status::bad_request, "badRequest", "Invalid endpoint", std::forward<Send>(send));
+                SendError(http::status::bad_request, "badRequest", "Invalid endpoint",
+                          std::forward<Send>(send));
                 return;
             }
             HandleTick(std::move(req), std::forward<Send>(send));
             return;
         }
 
-        // <-- ДОБАВЛЕНО: маршрут для /api/v1/game/records (с query)
-        if (target.starts_with("/api/v1/game/records")) {
+        // Запросы с query-параметрами начинаются с API_RECORDS
+        if (target.starts_with(API_RECORDS)) {
             HandleRecords(std::move(req), std::forward<Send>(send));
             return;
         }
-        
-        if (target == "/api/v1/maps") {
+
+        if (target == API_MAPS) {
             if (req.method() != http::verb::get && req.method() != http::verb::head) {
                 SendMethodNotAllowed(http::verb::get, std::forward<Send>(send));
                 return;
             }
             json::array arr;
             for (const auto& map : game_.GetMaps()) {
-                arr.push_back(MapToJson(map, false));
+                arr.push_back(json_response::MapToJson(map, loot_types_, false));
             }
             auto res = http::response<http::string_body>(http::status::ok, 11);
             res.set(http::field::content_type, "application/json");
@@ -127,27 +149,28 @@ public:
             send(std::move(res));
             return;
         }
-        
-        if (target.starts_with("/api/v1/maps/")) {
+
+        if (target.starts_with(API_MAPS_PREFIX)) {
             if (req.method() != http::verb::get && req.method() != http::verb::head) {
                 SendMethodNotAllowed(http::verb::get, std::forward<Send>(send));
                 return;
             }
-            auto id = target.substr(13);
-            auto* map = game_.FindMap(model::Map::Id(id));
+            const auto id = target.substr(kMapsPrefixLength);
+            const auto* map = game_.FindMap(model::Map::Id(id));
             if (map) {
                 auto res = http::response<http::string_body>(http::status::ok, 11);
                 res.set(http::field::content_type, "application/json");
                 res.set(http::field::cache_control, "no-cache");
-                res.body() = json::serialize(MapToJson(*map, true));
+                res.body() = json::serialize(json_response::MapToJson(*map, loot_types_, true));
                 res.content_length(res.body().size());
                 send(std::move(res));
             } else {
-                SendError(http::status::not_found, "mapNotFound", "Map not found", std::forward<Send>(send));
+                SendError(http::status::not_found, "mapNotFound", "Map not found",
+                          std::forward<Send>(send));
             }
             return;
         }
-        
+
         auto res = http::response<http::string_body>(http::status::bad_request, 11);
         res.set(http::field::content_type, "application/json");
         res.set(http::field::cache_control, "no-cache");
@@ -157,12 +180,13 @@ public:
     }
 
 private:
-    // <-- ДОБАВЛЕНО: парсер query
     static std::unordered_map<std::string, std::string>
     ParseQuery(std::string_view target) {
         std::unordered_map<std::string, std::string> params;
         auto pos = target.find('?');
-        if (pos == std::string_view::npos) return params;
+        if (pos == std::string_view::npos) {
+            return params;
+        }
         auto query = target.substr(pos + 1);
         while (!query.empty()) {
             auto amp = query.find('&');
@@ -172,13 +196,14 @@ private:
                 params[std::string(pair.substr(0, eq))] =
                     std::string(pair.substr(eq + 1));
             }
-            if (amp == std::string_view::npos) break;
+            if (amp == std::string_view::npos) {
+                break;
+            }
             query.remove_prefix(amp + 1);
         }
         return params;
     }
 
-    // <-- ДОБАВЛЕНО: обработчик /api/v1/game/records
     template <typename Send>
     void HandleRecords(http::request<http::string_body>&& req, Send&& send) {
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
@@ -187,18 +212,27 @@ private:
         }
 
         int start = 0;
-        int max_items = 100;
+        int max_items = kDefaultMaxItems;
 
         auto params = ParseQuery(std::string(req.target()));
-        auto parse_int = [](const std::string& s, int& out) -> bool {
-            if (s.empty()) return false;
+
+        auto parse_int = [](const std::string& text, int& value) -> bool {
+            if (text.empty()) {
+                return false;
+            }
             try {
-                size_t idx = 0;
-                int v = std::stoi(s, &idx);
-                if (idx != s.size() || v < 0) return false;
-                out = v;
+                std::size_t parsed_chars = 0;
+                const int parsed_value = std::stoi(text, &parsed_chars);
+                if (parsed_chars != text.size() || parsed_value < 0) {
+                    return false;
+                }
+                value = parsed_value;
                 return true;
-            } catch (...) {
+            } catch (const std::invalid_argument&) {
+                // Строка не является числом
+                return false;
+            } catch (const std::out_of_range&) {
+                // Число не помещается в int
                 return false;
             }
         };
@@ -216,9 +250,10 @@ private:
                           "Invalid maxItems parameter", std::forward<Send>(send));
                 return;
             }
-            if (max_items > 100) {
+            if (max_items > kMaxItemsLimit) {
                 SendError(http::status::bad_request, "invalidArgument",
-                          "maxItems must not exceed 100", std::forward<Send>(send));
+                          "maxItems must not exceed " + std::to_string(kMaxItemsLimit),
+                          std::forward<Send>(send));
                 return;
             }
         }
@@ -226,19 +261,15 @@ private:
         std::vector<infrastructure::RetiredPlayerRecord> records;
         try {
             records = records_repo_.GetRecords(start, max_items);
-        } catch (const std::exception& e) {
+        } catch (const std::exception&) {
             SendError(http::status::internal_server_error, "internalError",
                       "Failed to read records", std::forward<Send>(send));
             return;
         }
 
         json::array arr;
-        for (const auto& r : records) {
-            json::object obj;
-            obj["name"] = r.name;
-            obj["score"] = r.score;
-            obj["playTime"] = r.play_time;
-            arr.push_back(std::move(obj));
+        for (const auto& record : records) {
+            arr.push_back(json_response::RetiredPlayerToJson(record));
         }
 
         auto res = http::response<http::string_body>(http::status::ok, 11);
@@ -251,25 +282,30 @@ private:
         send(std::move(res));
     }
 
-    // Извлечение и валидация токена
     std::optional<std::string> ExtractToken(const http::request<http::string_body>& req) {
-        auto auth_header = req.find(http::field::authorization);
-        if (auth_header == req.end()) return std::nullopt;
-        std::string auth_value = std::string(auth_header->value());
-        const std::string bearer_prefix = "Bearer ";
-        if (auth_value.size() < bearer_prefix.size() ||
-            auth_value.substr(0, bearer_prefix.size()) != bearer_prefix) {
+        const auto auth_header = req.find(http::field::authorization);
+        if (auth_header == req.end()) {
             return std::nullopt;
         }
-        std::string token = auth_value.substr(bearer_prefix.size());
-        if (token.size() != 32) return std::nullopt;
+
+        const std::string auth_value{auth_header->value()};
+        if (auth_value.size() < kBearerPrefix.size() ||
+            auth_value.compare(0, kBearerPrefix.size(), kBearerPrefix) != 0) {
+            return std::nullopt;
+        }
+
+        std::string token = auth_value.substr(kBearerPrefix.size());
+        if (token.size() != kTokenLength) {
+            return std::nullopt;
+        }
         for (char c : token) {
-            if (!std::isxdigit(static_cast<unsigned char>(c))) return std::nullopt;
+            if (!std::isxdigit(static_cast<unsigned char>(c))) {
+                return std::nullopt;
+            }
         }
         return token;
     }
 
-    // ---- Все существующие HandleXxx — без изменений ----
     template <typename Send>
     void HandleJoinGame(http::request<http::string_body>&& req, Send&& send) {
         if (req.method() != http::verb::post) {
@@ -279,31 +315,37 @@ private:
         try {
             json::value parsed = json::parse(req.body());
             if (!parsed.is_object()) {
-                SendError(http::status::bad_request, "invalidArgument", "Join game request parse error", std::forward<Send>(send));
+                SendError(http::status::bad_request, "invalidArgument",
+                          "Join game request parse error", std::forward<Send>(send));
                 return;
             }
             json::object obj = parsed.as_object();
             if (!obj.contains("userName") || !obj.contains("mapId")) {
-                SendError(http::status::bad_request, "invalidArgument", "Join game request parse error", std::forward<Send>(send));
+                SendError(http::status::bad_request, "invalidArgument",
+                          "Join game request parse error", std::forward<Send>(send));
                 return;
             }
             std::string user_name = json::value_to<std::string>(obj["userName"]);
             std::string map_id_str = json::value_to<std::string>(obj["mapId"]);
             if (user_name.empty()) {
-                SendError(http::status::bad_request, "invalidArgument", "Invalid name", std::forward<Send>(send));
+                SendError(http::status::bad_request, "invalidArgument",
+                          "Invalid name", std::forward<Send>(send));
                 return;
             }
             model::Map::Id map_id(map_id_str);
             if (!game_.FindMap(map_id)) {
-                SendError(http::status::not_found, "mapNotFound", "Map not found", std::forward<Send>(send));
+                SendError(http::status::not_found, "mapNotFound", "Map not found",
+                          std::forward<Send>(send));
                 return;
             }
             uint32_t player_id = game_.AddPlayer(user_name, map_id);
             std::string auth_token = GenerateToken();
             game_.SetPlayerToken(auth_token, player_id);
+
             json::object response_obj;
             response_obj["authToken"] = auth_token;
             response_obj["playerId"] = player_id;
+
             auto res = http::response<http::string_body>(http::status::ok, 11);
             res.set(http::field::content_type, "application/json");
             res.set(http::field::cache_control, "no-cache");
@@ -311,10 +353,11 @@ private:
             res.content_length(res.body().size());
             send(std::move(res));
         } catch (const std::exception&) {
-            SendError(http::status::bad_request, "invalidArgument", "Join game request parse error", std::forward<Send>(send));
+            SendError(http::status::bad_request, "invalidArgument",
+                      "Join game request parse error", std::forward<Send>(send));
         }
     }
-    
+
     template <typename Send>
     void HandleGetPlayers(http::request<http::string_body>&& req, Send&& send) {
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
@@ -323,18 +366,21 @@ private:
         }
         auto token_opt = ExtractToken(req);
         if (!token_opt.has_value()) {
-            SendError(http::status::unauthorized, "invalidToken", "Authorization header is missing", std::forward<Send>(send));
+            SendError(http::status::unauthorized, "invalidToken",
+                      "Authorization header is missing", std::forward<Send>(send));
             return;
         }
         auto player_id = game_.GetPlayerIdByToken(*token_opt);
         if (!player_id.has_value()) {
-            SendError(http::status::unauthorized, "unknownToken", "Player token has not been found", std::forward<Send>(send));
+            SendError(http::status::unauthorized, "unknownToken",
+                      "Player token has not been found", std::forward<Send>(send));
             return;
         }
         const auto& players = game_.GetPlayers();
         auto player_it = players.find(*player_id);
         if (player_it == players.end()) {
-            SendError(http::status::unauthorized, "unknownToken", "Player token has not been found", std::forward<Send>(send));
+            SendError(http::status::unauthorized, "unknownToken",
+                      "Player token has not been found", std::forward<Send>(send));
             return;
         }
         model::Map::Id map_id = game_.GetPlayerMap(*player_id);
@@ -357,7 +403,7 @@ private:
         res.content_length(res.body().size());
         send(std::move(res));
     }
-    
+
     template <typename Send>
     void HandleGetState(http::request<http::string_body>&& req, Send&& send) {
         if (req.method() != http::verb::get && req.method() != http::verb::head) {
@@ -366,18 +412,21 @@ private:
         }
         auto token_opt = ExtractToken(req);
         if (!token_opt.has_value()) {
-            SendError(http::status::unauthorized, "invalidToken", "Authorization header is required", std::forward<Send>(send));
+            SendError(http::status::unauthorized, "invalidToken",
+                      "Authorization header is required", std::forward<Send>(send));
             return;
         }
         auto player_id = game_.GetPlayerIdByToken(*token_opt);
         if (!player_id.has_value()) {
-            SendError(http::status::unauthorized, "unknownToken", "Player token has not been found", std::forward<Send>(send));
+            SendError(http::status::unauthorized, "unknownToken",
+                      "Player token has not been found", std::forward<Send>(send));
             return;
         }
         const auto& players = game_.GetPlayers();
         auto player_it = players.find(*player_id);
         if (player_it == players.end()) {
-            SendError(http::status::unauthorized, "unknownToken", "Player token has not been found", std::forward<Send>(send));
+            SendError(http::status::unauthorized, "unknownToken",
+                      "Player token has not been found", std::forward<Send>(send));
             return;
         }
         model::Map::Id map_id = game_.GetPlayerMap(*player_id);
@@ -386,51 +435,19 @@ private:
         for (auto pid : map_players) {
             auto pit = players.find(pid);
             if (pit != players.end()) {
-                const auto& dog = pit->second.GetDog();
-                const auto& pos = dog->GetPosition();
-                const auto& speed = dog->GetSpeed();
-                json::object player_state;
-                json::array pos_arr;
-                pos_arr.push_back(pos.x);
-                pos_arr.push_back(pos.y);
-                player_state["pos"] = pos_arr;
-                json::array speed_arr;
-                speed_arr.push_back(speed.x);
-                speed_arr.push_back(speed.y);
-                player_state["speed"] = speed_arr;
-                std::string dir_str;
-                switch (dog->GetDirection()) {
-                    case model::Direction::NORTH: dir_str = "U"; break;
-                    case model::Direction::SOUTH: dir_str = "D"; break;
-                    case model::Direction::WEST: dir_str = "L"; break;
-                    case model::Direction::EAST: dir_str = "R"; break;
-                }
-                player_state["dir"] = dir_str;
-                json::array bag_arr;
-                for (const auto& item : pit->second.GetBag()) {
-                    json::object bag_item;
-                    bag_item["id"] = *item.id;
-                    bag_item["type"] = item.type;
-                    bag_arr.push_back(std::move(bag_item));
-                }
-                player_state["bag"] = std::move(bag_arr);
-                player_state["score"] = pit->second.GetScore();
-                players_json[std::to_string(pid)] = player_state;
+                players_json[std::to_string(pid)] =
+                    json_response::PlayerToJson(pit->second);
             }
         }
         json::object lost_objects_json;
         for (const auto& [id, obj] : game_.GetLostObjects().Get()) {
-            json::object item;
-            item["type"] = obj.type;
-            json::array pos_arr;
-            pos_arr.push_back(obj.pos.x);
-            pos_arr.push_back(obj.pos.y);
-            item["pos"] = pos_arr;
-            lost_objects_json[std::to_string(id)] = std::move(item);
+            lost_objects_json[std::to_string(id)] =
+                json_response::LostObjectToJson(obj);
         }
         json::object response_obj;
         response_obj["players"] = players_json;
         response_obj["lostObjects"] = lost_objects_json;
+
         auto res = http::response<http::string_body>(http::status::ok, 11);
         res.set(http::field::content_type, "application/json");
         res.set(http::field::cache_control, "no-cache");
@@ -440,7 +457,7 @@ private:
         res.content_length(res.body().size());
         send(std::move(res));
     }
-    
+
     template <typename Send>
     void HandlePlayerAction(http::request<http::string_body>&& req, Send&& send) {
         if (req.method() != http::verb::post) {
@@ -456,33 +473,39 @@ private:
         auto content_type = req.find(http::field::content_type);
         if (content_type == req.end() ||
             std::string(content_type->value()) != "application/json") {
-            SendError(http::status::bad_request, "invalidArgument", "Invalid content type", std::forward<Send>(send));
+            SendError(http::status::bad_request, "invalidArgument",
+                      "Invalid content type", std::forward<Send>(send));
             return;
         }
         auto token_opt = ExtractToken(req);
         if (!token_opt.has_value()) {
-            SendError(http::status::unauthorized, "invalidToken", "Authorization header is required", std::forward<Send>(send));
+            SendError(http::status::unauthorized, "invalidToken",
+                      "Authorization header is required", std::forward<Send>(send));
             return;
         }
         auto player_id = game_.GetPlayerIdByToken(*token_opt);
         if (!player_id.has_value()) {
-            SendError(http::status::unauthorized, "unknownToken", "Player token has not been found", std::forward<Send>(send));
+            SendError(http::status::unauthorized, "unknownToken",
+                      "Player token has not been found", std::forward<Send>(send));
             return;
         }
         try {
             json::value parsed = json::parse(req.body());
             if (!parsed.is_object()) {
-                SendError(http::status::bad_request, "invalidArgument", "Failed to parse action", std::forward<Send>(send));
+                SendError(http::status::bad_request, "invalidArgument",
+                          "Failed to parse action", std::forward<Send>(send));
                 return;
             }
             json::object obj = parsed.as_object();
             if (!obj.contains("move")) {
-                SendError(http::status::bad_request, "invalidArgument", "Failed to parse action", std::forward<Send>(send));
+                SendError(http::status::bad_request, "invalidArgument",
+                          "Failed to parse action", std::forward<Send>(send));
                 return;
             }
             std::string move = json::value_to<std::string>(obj["move"]);
             if (move != "L" && move != "R" && move != "U" && move != "D" && move != "") {
-                SendError(http::status::bad_request, "invalidArgument", "Failed to parse action", std::forward<Send>(send));
+                SendError(http::status::bad_request, "invalidArgument",
+                          "Failed to parse action", std::forward<Send>(send));
                 return;
             }
             game_.SetPlayerDirection(*player_id, move);
@@ -494,10 +517,11 @@ private:
             res.content_length(res.body().size());
             send(std::move(res));
         } catch (const std::exception&) {
-            SendError(http::status::bad_request, "invalidArgument", "Failed to parse action", std::forward<Send>(send));
+            SendError(http::status::bad_request, "invalidArgument",
+                      "Failed to parse action", std::forward<Send>(send));
         }
     }
-    
+
     template <typename Send>
     void HandleTick(http::request<http::string_body>&& req, Send&& send) {
         if (req.method() != http::verb::post) {
@@ -513,23 +537,27 @@ private:
         auto content_type = req.find(http::field::content_type);
         if (content_type == req.end() ||
             std::string(content_type->value()) != "application/json") {
-            SendError(http::status::bad_request, "invalidArgument", "Invalid content type", std::forward<Send>(send));
+            SendError(http::status::bad_request, "invalidArgument",
+                      "Invalid content type", std::forward<Send>(send));
             return;
         }
         try {
             json::value parsed = json::parse(req.body());
             if (!parsed.is_object()) {
-                SendError(http::status::bad_request, "invalidArgument", "Failed to parse tick request JSON", std::forward<Send>(send));
+                SendError(http::status::bad_request, "invalidArgument",
+                          "Failed to parse tick request JSON", std::forward<Send>(send));
                 return;
             }
             json::object obj = parsed.as_object();
             if (!obj.contains("timeDelta")) {
-                SendError(http::status::bad_request, "invalidArgument", "Failed to parse tick request JSON", std::forward<Send>(send));
+                SendError(http::status::bad_request, "invalidArgument",
+                          "Failed to parse tick request JSON", std::forward<Send>(send));
                 return;
             }
             int64_t time_delta = obj["timeDelta"].as_int64();
             if (time_delta < 0) {
-                SendError(http::status::bad_request, "invalidArgument", "Failed to parse tick request JSON", std::forward<Send>(send));
+                SendError(http::status::bad_request, "invalidArgument",
+                          "Failed to parse tick request JSON", std::forward<Send>(send));
                 return;
             }
             game_.Tick(static_cast<int>(time_delta));
@@ -541,12 +569,14 @@ private:
             res.content_length(res.body().size());
             send(std::move(res));
         } catch (const std::exception&) {
-            SendError(http::status::bad_request, "invalidArgument", "Failed to parse tick request JSON", std::forward<Send>(send));
+            SendError(http::status::bad_request, "invalidArgument",
+                      "Failed to parse tick request JSON", std::forward<Send>(send));
         }
     }
-    
+
     template <typename Send>
-    void SendError(http::status status, const std::string& code, const std::string& message, Send&& send) {
+    void SendError(http::status status, const std::string& code,
+                   const std::string& message, Send&& send) {
         auto res = http::response<http::string_body>(status, 11);
         res.set(http::field::content_type, "application/json");
         res.set(http::field::cache_control, "no-cache");
@@ -554,7 +584,7 @@ private:
         res.content_length(res.body().size());
         send(std::move(res));
     }
-    
+
     template <typename Send>
     void SendMethodNotAllowed(http::verb method, Send&& send) {
         auto res = http::response<http::string_body>(http::status::method_not_allowed, 11);
@@ -570,15 +600,17 @@ private:
         res.content_length(res.body().size());
         send(std::move(res));
     }
-    
+
     std::string GenerateToken() {
         std::uniform_int_distribution<> dis(0, 15);
         std::stringstream ss;
         ss << std::hex;
-        for (int i = 0; i < 32; ++i) ss << dis(gen_);
+        for (int i = 0; i < 32; ++i) {
+            ss << dis(gen_);
+        }
         return ss.str();
     }
-    
+
     std::string MakeError(const std::string& code, const std::string& message) {
         json::object obj;
         obj["code"] = code;
@@ -586,54 +618,9 @@ private:
         return json::serialize(obj);
     }
 
-    json::value RoadToJson(const model::Road& road) {
-        json::object obj;
-        obj["x0"] = road.GetStart().x;
-        obj["y0"] = road.GetStart().y;
-        if (road.IsHorizontal()) obj["x1"] = road.GetEnd().x;
-        else obj["y1"] = road.GetEnd().y;
-        return obj;
-    }
-
-    json::value MapToJson(const model::Map& map, bool full) {
-        json::object obj;
-        obj["id"] = *map.GetId();
-        obj["name"] = map.GetName();
-        if (full) {
-            json::array roads;
-            for (const auto& r : map.GetRoads()) roads.push_back(RoadToJson(r));
-            obj["roads"] = roads;
-            json::array buildings;
-            for (const auto& b : map.GetBuildings()) {
-                json::object bo;
-                bo["x"] = b.GetBounds().position.x;
-                bo["y"] = b.GetBounds().position.y;
-                bo["w"] = b.GetBounds().size.width;
-                bo["h"] = b.GetBounds().size.height;
-                buildings.push_back(bo);
-            }
-            obj["buildings"] = buildings;
-            json::array offices;
-            for (const auto& o : map.GetOffices()) {
-                json::object oo;
-                oo["id"] = *o.GetId();
-                oo["x"] = o.GetPosition().x;
-                oo["y"] = o.GetPosition().y;
-                oo["offsetX"] = o.GetOffset().dx;
-                oo["offsetY"] = o.GetOffset().dy;
-                offices.push_back(oo);
-            }
-            obj["offices"] = offices;
-            if (const auto* lt = loot_types_.FindForMap(*map.GetId())) {
-                obj["lootTypes"] = *lt;
-            }
-        }
-        return obj;
-    }
-
     model::Game& game_;
     extra_data::LootTypes& loot_types_;
-    infrastructure::RetiredPlayersRepository& records_repo_;   // <-- ДОБАВЛЕНО
+    infrastructure::RetiredPlayersRepository& records_repo_;
     StaticContentHandler static_handler_;
     bool allow_tick_;
     std::random_device random_device_;

@@ -100,7 +100,7 @@ LoadedGame LoadGame(const std::filesystem::path& json_path) {
         default_bag_capacity = static_cast<std::size_t>(root.at("defaultBagCapacity").as_int64());
     }
 
-    // <-- ДОБАВЛЕНО: время бездействия до ухода на пенсию
+    // Время бездействия до ухода на пенсию
     double dog_retirement_sec = 60.0;
     if (root.contains("dogRetirementTime")) {
         dog_retirement_sec = root.at("dogRetirementTime").as_double();
@@ -134,11 +134,12 @@ LoadedGame LoadGame(const std::filesystem::path& json_path) {
         std::vector<int> loot_values;
         loot_values.reserve(loot_arr.size());
         for (const auto& item : loot_arr) {
-            int v = 0;
-            if (item.as_object().contains("value")) {
-                v = static_cast<int>(item.as_object().at("value").as_int64());
+            const auto& item_object = item.as_object();
+            int loot_value = 0;
+            if (item_object.contains("value")) {
+                loot_value = static_cast<int>(item_object.at("value").as_int64());
             }
-            loot_values.push_back(v);
+            loot_values.push_back(loot_value);
         }
 
         auto map = ParseMap(map_obj, default_dog_speed, loot_types_count, bag_capacity);
@@ -153,7 +154,7 @@ LoadedGame LoadGame(const std::filesystem::path& json_path) {
         std::move(loot_gen),
         std::move(loot_types),
         std::chrono::milliseconds{
-            static_cast<int64_t>(dog_retirement_sec * 1000)}    // <-- ДОБАВЛЕНО
+            static_cast<int64_t>(dog_retirement_sec * 1000)}
     };
 }
 

@@ -67,18 +67,24 @@ void RunWorkers(unsigned n, const Fn& fn) {
 }
 
 void MyFormatter(logging::record_view const& rec, logging::formatting_ostream& strm) {
-    auto ts = rec[timestamp];
-    auto msg = rec[expr::smessage];
-    auto data = rec[additional_data];
+    const auto& timestamp_value = rec[timestamp];
+    const auto& message_value = rec[expr::smessage];
+    const auto& data_value = rec[additional_data];
+
     json::object obj;
-    if (ts) {
+    if (timestamp_value) {
         std::ostringstream ss;
-        ss << boost::posix_time::to_iso_extended_string(*ts);
+        ss << boost::posix_time::to_iso_extended_string(*timestamp_value);
         obj["timestamp"] = ss.str();
     }
-    if (msg) obj["message"] = msg.get();
-    if (data) obj["data"] = *data;
-    else obj["data"] = json::object{};
+    if (message_value) {
+        obj["message"] = message_value.get();
+    }
+    if (data_value) {
+        obj["data"] = *data_value;
+    } else {
+        obj["data"] = json::object{};
+    }
     strm << json::serialize(obj);
 }
 
@@ -94,6 +100,7 @@ void InitLogging() {
 std::optional<Args> ParseCommandLine(int argc, const char* const argv[]) {
     po::options_description desc{"Allowed options"s};
     Args args;
+
     desc.add_options()
         ("help,h", "produce help message")
         ("tick-period,t", po::value<int>()->value_name("milliseconds"s), "set tick period")
@@ -102,20 +109,38 @@ std::optional<Args> ParseCommandLine(int argc, const char* const argv[]) {
         ("randomize-spawn-points", po::bool_switch(&args.randomize_spawn_points), "spawn dogs at random positions")
         ("state-file", po::value<std::string>()->value_name("path"s), "state file path")
         ("save-state-period", po::value<int>()->value_name("milliseconds"s), "save state period");
+
     po::variables_map vm;
     po::store(po::parse_command_line(argc, argv, desc), vm);
     po::notify(vm);
-    if (vm.contains("help"s)) { std::cout << desc; return std::nullopt; }
-    if (!vm.contains("config-file"s)) throw std::runtime_error("Config file path is not specified"s);
-    if (!vm.contains("www-root"s)) throw std::runtime_error("Static files root is not specified"s);
-    if (vm.contains("tick-period"s)) args.tick_period = vm["tick-period"s].as<int>();
-    if (vm.contains("state-file"s)) args.state_file = fs::path{vm["state-file"s].as<std::string>()};
+
+    if (vm.contains("help"s)) {
+        std::cout << desc;
+        return std::nullopt;
+    }
+    if (!vm.contains("config-file"s)) {
+        throw std::runtime_error("Config file path is not specified"s);
+    }
+    if (!vm.contains("www-root"s)) {
+        throw std::runtime_error("Static files root is not specified"s);
+    }
+
+    if (vm.contains("tick-period"s)) {
+        args.tick_period = vm["tick-period"s].as<int>();
+    }
+    if (vm.contains("state-file"s)) {
+        args.state_file = fs::path{vm["state-file"s].as<std::string>()};
+    }
     if (vm.contains("save-state-period"s)) {
-        int period = vm["save-state-period"s].as<int>();
-        if (period <= 0) throw std::runtime_error("save-state-period must be positive"s);
+        const int period = vm["save-state-period"s].as<int>();
+        if (period <= 0) {
+            throw std::runtime_error("save-state-period must be positive"s);
+        }
         args.save_state_period = period;
     }
-    if (!args.state_file) args.save_state_period.reset();
+    if (!args.state_file) {
+        args.save_state_period.reset();
+    }
     return args;
 }
 
@@ -126,7 +151,9 @@ int main(int argc, const char* argv[]) {
         InitLogging();
 
         auto args = ParseCommandLine(argc, argv);
-        if (!args) return EXIT_SUCCESS;
+        if (!args) {
+            return EXIT_SUCCESS;
+        }
 
         if (!fs::exists(args->config_file)) {
             std::cerr << "Error: Config file does not exist: " << args->config_file << std::endl;
@@ -137,7 +164,6 @@ int main(int argc, const char* argv[]) {
             return EXIT_FAILURE;
         }
 
-        // --- Загружаем конфигурацию игры ---
         auto loaded = json_loader::LoadGame(args->config_file);
         loaded.game.SetRandomizeSpawnPoints(args->randomize_spawn_points);
         loaded.game.SetDogRetirementTime(loaded.dog_retirement_time.count());
@@ -173,7 +199,6 @@ int main(int argc, const char* argv[]) {
         loaded.game.SetRetirementListener(&retirement_handler);
         // ============================================================
 
-        // --- Восстановление состояния ---
         std::unique_ptr<infrastructure::SerializingListener> save_listener;
 
         if (args->state_file) {
@@ -200,9 +225,9 @@ int main(int argc, const char* argv[]) {
                 std::chrono::milliseconds{loaded.game.GetElapsedMs()});
 
             loaded.game.SetTickListener(
-                [&save_listener](std::chrono::milliseconds d) {
+                [&save_listener](std::chrono::milliseconds delta) {
                     if (save_listener) {
-                        save_listener->OnTick(d);
+                        save_listener->OnTick(delta);
                     }
                 });
         }
@@ -217,7 +242,6 @@ int main(int argc, const char* argv[]) {
             }
         });
 
-        // --- Создаём обработчик запросов ---
         http_handler::RequestHandler handler{
             loaded.game,
             loaded.loot_types,
